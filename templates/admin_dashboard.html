@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Admin Portal | SRIT</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+    <header class="main-header">
+        <div style="display:flex; align-items:center; gap:1rem;">
+            <img src="{{ url_for('static', filename='srit_logo.png') }}" height="36"
+                style="background:white; border-radius:50%; padding:2px;">
+            <div>
+                <h1>Admin Console</h1>
+                <p>SRIT Gate Pass System</p>
+            </div>
+        </div>
+        <div class="header-user">
+            <span>{{ session['name'] }}</span>
+            <a href="/" class="logout-btn">Logout</a>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="tabs">
+            <button class="tab-btn active" onclick="showTab('overview')">📊 Overview</button>
+            <button class="tab-btn" onclick="showTab('active_visitors')">🟢 Active Visitors</button>
+            <button class="tab-btn" onclick="showTab('history')">📜 History</button>
+            <button class="tab-btn" onclick="showTab('appointment')">📅 New Booking</button>
+            <button class="tab-btn" onclick="showTab('database')">📂 Database</button>
+        </div>
+
+        <div id="overview" class="tab-content active">
+            <div class="stat-grid">
+                <div class="stat-card" style="border-top-color: var(--success);">
+                    <h3>Active Visitors</h3>
+                    <p style="color: var(--success);">{{ active_visitors|length }}</p>
+                </div>
+                <div class="stat-card" style="border-top-color: var(--warning);">
+                    <h3>Pending Bookings</h3>
+                    <p style="color: var(--warning);">{{ bookings|length }}</p>
+                </div>
+                <div class="stat-card" style="border-top-color: var(--accent);">
+                    <h3>Total Entries</h3>
+                    <p style="color: var(--accent);">{{ visitors|length }}</p>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3 style="margin-top:0; margin-bottom:1.5rem;">Recent Activity Log</h3>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>Visitor</th>
+                                <th>Host</th>
+                                <th>Department</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in visitors %}
+                            <tr>
+                                <td>{{ row[0] }} <span
+                                        style="font-size:0.8rem; color:var(--text-light); display:block;">{{ row[1]
+                                        }}</span></td>
+                                <td><strong>{{ row[3] }}</strong><br><span style="font-size:0.8rem;">{{ row[5] }}</span>
+                                </td>
+                                <td>{{ row[7] }}</td>
+                                <td><span class="badge badge-blue">{{ row[8] }}</span></td>
+                                <td>
+                                    {% if row[10] %} <span class="badge badge-red">OUT: {{ row[10] }}</span>
+                                    {% else %} <span class="badge badge-green">INSIDE</span> {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div id="active_visitors" class="tab-content">
+            <div class="card">
+                <h2 style="margin-top:0; color:var(--success);">On-Campus Visitors</h2>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>In Time</th>
+                                <th>Visitor Details</th>
+                                <th>Meeting</th>
+                                <th>Photo</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in active_visitors %}
+                            <tr>
+                                <td style="font-weight:600;">{{ row[1] }}</td>
+                                <td>{{ row[3] }}<br><span style="font-size:0.85rem; color:var(--text-light);">{{ row[2]
+                                        }} • {{ row[5] }}</span></td>
+                                <td>{{ row[7] }} ({{ row[8] }})</td>
+                                <td>
+                                    {% if row[9] %} <a href="{{ row[9] }}" target="_blank" class="badge badge-yellow"
+                                        style="text-decoration:none;">View</a>
+                                    {% else %} - {% endif %}
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="4" style="text-align:center; padding:2rem;">No visitors currently inside.
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div id="history" class="tab-content">
+            <div class="card">
+                <h2 style="margin-top:0;">Past Bookings</h2>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Visitor</th>
+                                <th>Host</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in past_bookings %}
+                            <tr>
+                                <td>{{ row[0] }}</td>
+                                <td>{{ row[5] }}</td>
+                                <td>{{ row[2] }}</td>
+                                <td><span class="badge badge-{{ 'green' if row[7] == 'Arrived' else 'red' }}">{{ row[7]
+                                        }}</span></td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="4" style="text-align:center;">No history found.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div id="appointment" class="tab-content">
+            <div class="card" style="max-width:800px; margin:0 auto;">
+                <h2
+                    style="margin-top:0; color:var(--primary); border-bottom:1px solid #e2e8f0; padding-bottom:1rem; margin-bottom:1.5rem;">
+                    Schedule Appointment</h2>
+
+                <form id="adminBookingForm">
+                    <div style="background:#f8fafc; padding:1.5rem; border-radius:12px; margin-bottom:1.5rem;">
+                        <h4 style="margin:0 0 1rem 0; color:var(--accent);">1. Visitor Information</h4>
+                        <div class="row">
+                            <div>
+                                <label>Mobile Number</label>
+                                <input type="number" id="v_mobile" placeholder="Search by mobile..."
+                                    onblur="checkVisitor()" required>
+                            </div>
+                            <div>
+                                <label>Full Name</label>
+                                <input type="text" id="v_name" placeholder="Visitor Name" required>
+                            </div>
+                        </div>
+                        <div id="status-msg" style="margin-top:0.5rem; font-size:0.85rem; font-weight:600;"></div>
+
+                        <div class="row" style="margin-top:1rem;">
+                            <div>
+                                <label>Organization</label>
+                                <input type="text" id="v_company" placeholder="Company / Institution">
+                            </div>
+                            <div>
+                                <label>Purpose</label>
+                                <select id="v_purpose">
+                                    <option value="Official Visit">Official Visit</option>
+                                    <option value="Meeting">Meeting</option>
+                                    <option value="Inspection">Inspection</option>
+                                    <option value="Guest Lecture">Guest Lecture</option>
+                                    <option value="Personal">Personal</option>
+                                    <option value="Others">Others</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="background:#f8fafc; padding:1.5rem; border-radius:12px;">
+                        <h4 style="margin:0 0 1rem 0; color:var(--accent);">2. Meeting Details</h4>
+                        <div class="row">
+                            <div>
+                                <label>Host Name</label>
+                                <input type="text" id="host_name" value="{{ session['name'] }}">
+                            </div>
+                            <div>
+                                <label>Department</label>
+                                <input type="text" id="host_dept" value="ADMIN">
+                            </div>
+                        </div>
+                    </div>
+
+                    <button type="button" class="action-btn" onclick="submitAdminBooking()">✅ Confirm
+                        Appointment</button>
+                    <p id="msg" style="text-align:center; margin-top:1rem; font-weight:600;"></p>
+                </form>
+            </div>
+        </div>
+
+        <div id="database" class="tab-content">
+            <div class="card" style="text-align:center; max-width:500px; margin:0 auto;">
+                <h3 style="margin-top:0;">Database & Cloud</h3>
+                <p style="color:var(--text-light); margin-bottom:2rem;">Direct access to system resources.</p>
+
+                <a href="https://docs.google.com/spreadsheets/d/{{ sheet_id }}" target="_blank" class="action-btn"
+                    style="display:block; text-decoration:none; background:#10b981; margin-bottom:1rem;">📊 Google
+                    Sheets Logs</a>
+                <a href="https://drive.google.com/drive/u/0/folders/{{ drive_id }}" target="_blank" class="action-btn"
+                    style="display:block; text-decoration:none; background:#3b82f6; margin-bottom:1rem;">📁 Drive
+                    Photos</a>
+                <a href="https://console.firebase.google.com/" target="_blank" class="action-btn"
+                    style="display:block; text-decoration:none; background:#f59e0b;">🔥 Firebase Users</a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function showTab(id) {
+            document.querySelectorAll('.tab-content').forEach(d => d.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById(id).classList.add('active');
+            event.target.classList.add('active');
+        }
+
+        async function checkVisitor() {
+            const mobile = document.getElementById('v_mobile').value;
+            const msg = document.getElementById('status-msg');
+            if (mobile.length !== 10) { msg.innerText = ""; return; }
+
+            msg.innerText = "Checking...";
+            msg.style.color = "var(--text-light)";
+
+            try {
+                const res = await fetch(`/api/check_visitor?mobile=${mobile}`);
+                const data = await res.json();
+                if (data.found) {
+                    document.getElementById('v_name').value = data.name || "";
+                    document.getElementById('v_company').value = data.company || "";
+                    msg.innerHTML = "ℹ️ Found in Database. Auto-filled.";
+                    msg.style.color = "var(--accent)";
+                } else {
+                    msg.innerHTML = "✨ New Visitor";
+                    msg.style.color = "var(--success)";
+                }
+            } catch (e) { console.error(e); }
+        }
+
+        async function submitAdminBooking() {
+            const btn = document.querySelector('.action-btn');
+            const msg = document.getElementById('msg');
+            btn.innerText = "Processing...";
+            btn.disabled = true;
+
+            const data = {
+                name: document.getElementById('v_name').value,
+                mobile: document.getElementById('v_mobile').value,
+                company: document.getElementById('v_company').value,
+                purpose: document.getElementById('v_purpose').value,
+                to_meet: document.getElementById('host_name').value,
+                department: document.getElementById('host_dept').value
+            };
+
+            if (!data.name || !data.mobile) {
+                alert("Please fill name and mobile");
+                btn.innerText = "✅ Confirm Appointment";
+                btn.disabled = false;
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/book_visitor', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                const result = await res.json();
+
+                if (result.status === 'success') {
+                    msg.innerText = "Success! Appointment Created.";
+                    msg.style.color = "var(--success)";
+                    document.getElementById('adminBookingForm').reset();
+                    setTimeout(() => location.reload(), 1500);
+                } else {
+                    msg.innerText = "Error: " + result.message;
+                    msg.style.color = "var(--danger)";
+                    btn.innerText = "✅ Confirm Appointment";
+                    btn.disabled = false;
+                }
+            } catch (e) {
+                msg.innerText = "Network Error";
+                btn.disabled = false;
+            }
+        }
+    </script>
+</body>
+
+</html>

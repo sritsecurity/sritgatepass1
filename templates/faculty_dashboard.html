@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Faculty Portal | SRIT</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+    <header class="main-header">
+        <div>
+            <h1>Faculty Portal</h1>
+            <p>Welcome, {{ session['name'] }}</p>
+        </div>
+        <a href="/" class="logout-btn">Logout</a>
+    </header>
+
+    <div class="container" style="max-width:700px;">
+        <div class="card">
+            <h2 style="margin-top:0; color:var(--primary); border-bottom:1px solid #e2e8f0; padding-bottom:1rem;">📅
+                Book a Visitor</h2>
+            <p style="color:var(--text-light); margin-bottom:2rem;">Pre-booking streamlines the entry process at the
+                security gate.</p>
+
+            <form id="bookingForm">
+                <div class="row">
+                    <div>
+                        <label>Visitor Name</label>
+                        <input type="text" id="v_name" placeholder="Full Name" required>
+                    </div>
+                    <div>
+                        <label>Mobile Number</label>
+                        <input type="number" id="v_mobile" placeholder="10-digit Mobile" required>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div>
+                        <label>Purpose</label>
+                        <select id="v_purpose">
+                            <option value="Guest Lecture">Guest Lecture</option>
+                            <option value="Personal">Personal</option>
+                            <option value="Event Judge">Event Judge</option>
+                            <option value="Parent Meeting">Parent Meeting</option>
+                            <option value="Vendor">Vendor/Service</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label>Organization (Optional)</label>
+                        <input type="text" id="v_company" placeholder="e.g. Bosch">
+                    </div>
+                </div>
+
+                <button type="button" class="action-btn" onclick="submitBooking()">✅ Confirm Booking</button>
+                <p id="msg" style="text-align:center; margin-top:1rem; font-weight:600;"></p>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        async function submitBooking() {
+            const btn = document.querySelector('.action-btn');
+            const msg = document.getElementById('msg');
+            btn.innerText = "Processing...";
+            btn.disabled = true;
+
+            const data = {
+                name: document.getElementById('v_name').value,
+                mobile: document.getElementById('v_mobile').value,
+                purpose: document.getElementById('v_purpose').value,
+                company: document.getElementById('v_company').value
+            };
+
+            const res = await fetch('/api/book_visitor', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            const result = await res.json();
+
+            if (result.status === 'success') {
+                msg.innerText = "Booking Confirmed! Security notified.";
+                msg.style.color = "var(--success)";
+                document.getElementById('bookingForm').reset();
+                setTimeout(() => { btn.innerText = "✅ Confirm Booking"; btn.disabled = false; msg.innerText = ""; }, 3000);
+            } else {
+                msg.innerText = "Error: " + result.message;
+                msg.style.color = "var(--danger)";
+                btn.innerText = "✅ Confirm Booking";
+                btn.disabled = false;
+            }
+        }
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,13 @@
+# Security Keys (NEVER UPLOAD THESE)
+token.json
+credentials.json
+
+# Python System Files
+__pycache__/
+*.pyc
+venv/
+env/
+
+# Editor Settings
+.vscode/
+.idea/

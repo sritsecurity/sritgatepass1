@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SRIT Gate Pass | Login</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body class="login-body">
+    <div class="login-card">
+        <div style="margin-bottom: 2rem;">
+            <img src="{{ url_for('static', filename='srit_logo.png') }}" alt="SRIT Logo"
+                style="width: 80px; height: auto;">
+        </div>
+        <h2 style="margin: 0; font-size: 1.5rem; color: var(--primary);">Gate Pass System</h2>
+        <p style="color: var(--text-light); margin-bottom: 2.5rem;">Secure Access Portal</p>
+
+        <button class="google-btn" onclick="googleLogin()">
+            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="20" alt="G">
+            Sign in with Google
+        </button>
+
+        <div id="error-msg"
+            style="margin-top: 1.5rem; color: var(--danger); font-size: 0.9rem; display: none; background: #fef2f2; padding: 0.75rem; border-radius: 8px;">
+        </div>
+    </div>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
+    <script>
+        // CONFIGURATION (Injected Securely by Flask)
+        const firebaseConfig = {
+            apiKey: "{{ firebase_config.apiKey }}",  // 👈 Secure Injection
+            authDomain: "{{ firebase_config.authDomain }}",
+            projectId: "{{ firebase_config.projectId }}",
+            storageBucket: "{{ firebase_config.storageBucket }}",
+            messagingSenderId: "{{ firebase_config.messagingSenderId }}",
+            appId: "{{ firebase_config.appId }}"
+        };
+        firebase.initializeApp(firebaseConfig);
+
+        function googleLogin() {
+            const provider = new firebase.auth.GoogleAuthProvider();
+            firebase.auth().signInWithPopup(provider)
+                .then((result) => {
+                    fetch('/api/login', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ email: result.user.email, name: result.user.displayName })
+                    })
+                        .then(res => res.json())
+                        .then(data => {
+                            if (data.status === 'success') window.location.href = data.redirect;
+                            else {
+                                const errDiv = document.getElementById('error-msg');
+                                errDiv.innerText = data.message;
+                                errDiv.style.display = 'block';
+                                firebase.auth().signOut();
+                            }
+                        });
+                })
+                .catch((error) => alert("Login Failed: " + error.message));
+        }
+    </script>
+</body>
+
+</html>

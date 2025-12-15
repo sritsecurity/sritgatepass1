@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>SRIT Security Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+    <header class="main-header">
+        <div style="display:flex; align-items:center; gap:15px;">
+            <img src="{{ url_for('static', filename='srit_logo.png') }}" height="40"
+                style="background:white; border-radius:50%; padding:2px;">
+            <div>
+                <h1>SRIT Main Gate</h1>
+                <p>Security Panel</p>
+            </div>
+        </div>
+        <div style="text-align:right;">
+            <span style="display:block; font-size:0.9rem;">👤 {{ session['name'] }}</span>
+            <a href="/" style="font-size:0.8rem; color:#ffcc00;">Logout</a>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="tabs">
+            <button class="tab-btn active" onclick="showTab('bookings')">📅 Bookings</button>
+            <button class="tab-btn" onclick="showTab('entry')">📷 Entry</button>
+            <button class="tab-btn" onclick="showTab('exit')">🚪 Exit</button>
+        </div>
+
+        <div id="bookings" class="tab-content active">
+            <div class="card">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+                    <h2 style="margin:0;">Today's Pre-Booked Visitors</h2>
+                    <button onclick="loadBookings()" class="btn-sm action-btn"
+                        style="width:auto; margin:0; padding:8px 15px;">🔄 Refresh</button>
+                </div>
+                <table class="booking-table">
+                    <thead>
+                        <tr>
+                            <th>Visitor</th>
+                            <th>Mobile</th>
+                            <th>Booked By (Staff)</th>
+                            <th>Dept</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="booking-list-body"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="entry" class="tab-content">
+            <div class="split-layout">
+                <div class="card" style="padding:0; overflow:hidden; border:none; background:transparent;">
+                    <div class="camera-section">
+                        <video id="video" autoplay></video>
+                        <button id="snap-btn" onclick="takeSnapshot()">📸 Capture</button>
+                    </div>
+                    <img id="photo-preview" src="" alt="Preview">
+                </div>
+
+                <div class="card">
+                    <h2 style="margin-top:0; color:var(--primary);">New Entry</h2>
+
+                    <div style="margin-bottom:1rem;">
+                        <input type="number" id="mobile" placeholder="Visitor Mobile (10 digits)"
+                            onblur="checkVisitor()">
+                        <div id="status-msg"></div>
+                    </div>
+
+                    <input type="text" id="name" placeholder="Full Name">
+
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                        <select id="designation">
+                            <option value="Visitor">Visitor</option>
+                            <option value="Parent">Parent</option>
+                            <option value="Student">Student</option>
+                            <option value="Vendor">Vendor</option>
+                            <option value="Guest">Guest</option>
+                        </select>
+                        <input type="text" id="company" placeholder="Company / Place">
+                    </div>
+
+                    <input type="text" id="laptop" placeholder="Laptop (Optional)">
+
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                        <input type="text" id="to_meet" placeholder="To Meet (Staff)">
+                        <input type="text" id="department" placeholder="Department">
+                    </div>
+
+                    <button class="action-btn" onclick="generatePassRapid()">⚡ Print Pass (Instant)</button>
+                    <p id="save-status" style="text-align:center; font-size:0.8rem; margin-top:5px; color:gray;"></p>
+                </div>
+            </div>
+        </div>
+
+        <div id="exit" class="tab-content">
+            <div class="card" style="max-width:500px; margin:0 auto; text-align:center;">
+                <h2 style="color:var(--primary);">Visitor Checkout</h2>
+                <input type="number" id="exit-mobile" placeholder="Visitor Mobile Number"
+                    style="text-align:center; font-size:1.2rem;">
+                <br><br>
+                <button class="action-btn red" onclick="markExit()">Mark Exit</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="printable-ticket">
+        <div class="p-header">
+            <img src="{{ url_for('static', filename='srit_logo.png') }}" class="p-logo" alt="Logo">
+            <div class="p-header-text">
+                <h3>Sri Ramakrishna Institute of Technology</h3>
+                <p>Visitor Gate Pass</p>
+            </div>
+        </div>
+
+        <div class="p-meta">
+            <span>Pass No: <span id="t-pass-id"></span></span>
+            <span id="t-date-time"></span>
+        </div>
+
+        <div class="p-body">
+            <div class="p-fields">
+                <div class="p-row"><span class="p-label">Name:</span><span class="p-val" id="t-name"></span></div>
+                <div class="p-row"><span class="p-label">Category:</span><span class="p-val" id="t-designation"></span>
+                </div>
+                <div class="p-row"><span class="p-label">From:</span><span class="p-val" id="t-company"></span></div>
+                <div class="p-row"><span class="p-label">Mobile:</span><span class="p-val" id="t-mobile"></span></div>
+                <div class="p-row"><span class="p-label">Laptop:</span><span class="p-val" id="t-laptop"></span></div>
+            </div>
+            <div class="p-photo-box">
+                <img id="t-photo" class="p-photo" src="" alt="Visitor Photo">
+            </div>
+        </div>
+
+        <div class="p-meet">
+            <p><strong>To Meet:</strong> <span id="t-meet"></span></p>
+            <p><strong>Department:</strong> <span id="t-dept"></span></p>
+        </div>
+
+        <div class="p-footer">
+            <div class="p-sign">Visitor Sign</div>
+            <div class="p-sign">Security Sign</div>
+        </div>
+
+        <div class="p-out">
+            Out Time: __________________
+        </div>
+    </div>
+
+    <script>
+        // --- LOGIC ---
+        function showTab(id) {
+            document.querySelectorAll('.tab-content').forEach(d => d.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById(id).classList.add('active');
+
+            const btns = document.querySelectorAll('.tab-btn');
+            if (id === 'bookings') btns[0].classList.add('active');
+            if (id === 'entry') btns[1].classList.add('active');
+            if (id === 'exit') btns[2].classList.add('active');
+
+            if (id === 'bookings') loadBookings();
+        }
+
+        async function loadBookings() {
+            const tbody = document.getElementById('booking-list-body');
+            tbody.innerHTML = "<tr><td colspan='5' style='text-align:center'>Loading...</td></tr>";
+            const res = await fetch('/api/get_today_bookings');
+            const data = await res.json();
+            tbody.innerHTML = "";
+            if (data.length === 0) {
+                tbody.innerHTML = "<tr><td colspan='5' style='text-align:center'>No pending bookings today.</td></tr>";
+                return;
+            }
+            data.forEach(b => {
+                tbody.innerHTML += `
+                    <tr>
+                        <td><strong>${b.visitor}</strong></td>
+                        <td>${b.mobile}</td>
+                        <td>${b.booked_by}</td>
+                        <td><span style="background:#e2e8f0; padding:2px 6px; border-radius:4px; font-size:0.8rem;">${b.dept}</span></td>
+                        <td><button class="btn-sm action-btn" style="margin:0; width:auto; padding:5px 10px;" onclick="processBooking('${b.mobile}')">Process</button></td>
+                    </tr>`;
+            });
+        }
+
+        function processBooking(mobile) {
+            showTab('entry');
+            document.getElementById('mobile').value = mobile;
+            checkVisitor();
+        }
+
+        // Camera
+        const video = document.getElementById('video');
+        const canvas = document.createElement('canvas');
+        let capturedImage = null;
+        navigator.mediaDevices.getUserMedia({ video: true }).then(s => { video.srcObject = s; });
+
+        function takeSnapshot() {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0);
+            capturedImage = canvas.toDataURL('image/jpeg');
+            const preview = document.getElementById('photo-preview');
+            preview.src = capturedImage;
+            preview.style.display = 'block';
+        }
+
+        async function checkVisitor() {
+            const mobile = document.getElementById('mobile').value;
+            const msg = document.getElementById('status-msg');
+            msg.innerHTML = "";
+            if (mobile.length !== 10) return;
+
+            const res = await fetch(`/api/check_visitor?mobile=${mobile}`);
+            const data = await res.json();
+
+            if (data.found) {
+                document.getElementById('name').value = data.name || "";
+                document.getElementById('company').value = data.company || "";
+                document.getElementById('laptop').value = data.laptop || "";
+                document.getElementById('to_meet').value = data.to_meet || "";
+                document.getElementById('department').value = data.department || "";
+
+                if (data.is_booking) {
+                    msg.innerHTML = `<div style="background:#c6f6d5; color:#22543d; padding:8px; border-radius:6px;">✅ Pre-Booked by ${data.booked_by}</div>`;
+                } else {
+                    msg.innerHTML = `<div style="background:#bee3f8; color:#2c5282; padding:8px; border-radius:6px;">ℹ️ Returning Visitor</div>`;
+                }
+            } else {
+                msg.innerHTML = `<div style="background:#e2e8f0; color:#4a5568; padding:8px; border-radius:6px;">New Visitor</div>`;
+            }
+        }
+
+        // --- ⚡ RAPID PRINT FUNCTION ---
+        function generatePassRapid() {
+            if (!capturedImage) { alert("Please capture photo!"); return; }
+
+            // 1. Collect Data
+            const payload = {
+                mobile: document.getElementById('mobile').value,
+                name: document.getElementById('name').value,
+                designation: document.getElementById('designation').value,
+                company: document.getElementById('company').value,
+                laptop: document.getElementById('laptop').value,
+                to_meet: document.getElementById('to_meet').value,
+                department: document.getElementById('department').value,
+                image: capturedImage
+            };
+
+            if (!payload.mobile || !payload.name) {
+                alert("Please enter Name and Mobile");
+                return;
+            }
+
+            // 2. GENERATE LOCAL ID & TIME (Instant)
+            const now = new Date();
+            const timeString = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            const dateString = now.toLocaleDateString();
+            const rapidID = "G" + now.getSeconds() + Math.floor(Math.random() * 100); // e.g., G4512
+
+            // 3. FILL TICKET IMMEDIATELY
+            document.getElementById('t-pass-id').innerText = rapidID;
+            document.getElementById('t-date-time').innerText = dateString + " " + timeString;
+            document.getElementById('t-name').innerText = payload.name;
+            document.getElementById('t-designation').innerText = payload.designation;
+            document.getElementById('t-company').innerText = payload.company;
+            document.getElementById('t-mobile').innerText = payload.mobile;
+            document.getElementById('t-laptop').innerText = payload.laptop;
+            document.getElementById('t-meet').innerText = payload.to_meet;
+            document.getElementById('t-dept').innerText = payload.department;
+            document.getElementById('t-photo').src = capturedImage;
+
+            // 4. TRIGGER PRINT (Don't wait for server)
+            const statusMsg = document.getElementById('save-status');
+            statusMsg.innerText = "🖨️ Printing... (Saving to Cloud in background)";
+            statusMsg.style.color = "blue";
+
+            setTimeout(() => {
+                window.print();
+
+                // 5. SEND TO SERVER (Background Sync)
+                fetch('/api/entry', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                })
+                    .then(res => res.json())
+                    .then(data => {
+                        console.log("Saved to cloud:", data);
+                        // Reload ONLY after print + save is done
+                        window.location.reload();
+                    })
+                    .catch(err => {
+                        alert("⚠️ Printed, but Save Failed! Check Internet.");
+                        console.error(err);
+                    });
+
+            }, 300); // Small delay to ensure image renders
+        }
+
+        async function markExit() {
+            const mobile = document.getElementById('exit-mobile').value;
+            const res = await fetch('/api/exit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mobile }) });
+            const data = await res.json();
+            alert(data.message || "Marked OUT: " + data.out_time);
+            if (data.status === 'success') document.getElementById('exit-mobile').value = "";
+        }
+
+        loadBookings();
+    </script>
+</body>
+
+</html>
