@@ -3,65 +3,67 @@ import re
 import json
 import base64
 from datetime import datetime
+from dotenv import load_dotenv
+
+# Load env vars before anything else
+load_dotenv() 
+
 from flask import Flask, render_template, request, jsonify, session, redirect
 import gspread
 from google.oauth2.credentials import Credentials 
 from drive_manager import upload_photo_to_drive 
 
 app = Flask(__name__)
-app.secret_key = "SRIT_GATEPASS_SECRET_KEY"
 
-# ==========================================
-# ⚠️ CONFIGURATION 
-# ==========================================
-SHEET_NAME = "SRIT_Visitor_Database"
-SHEET_ID = "19MqFYkcmkJ7BfVaiR-Lc1tWlApByh4_cTWeUanuI-ng" 
-DRIVE_FOLDER_ID = "14cKg8YpnBmgDkT6yoPKx0SGFj4kcujc8" 
-# ==========================================
+# [SECURE] Load Secret Key from Environment
+app.secret_key = os.getenv("FLASK_SECRET_KEY", "fallback_dev_key_do_not_use_in_prod")
+
+# [SECURE] Load Configuration from Environment
+SHEET_NAME = "SRIT_Visitor_Database" # Name is less sensitive, but ID is better in env
+SHEET_ID = os.getenv("GOOGLE_SHEET_ID")
+DRIVE_FOLDER_ID = os.getenv("GOOGLE_DRIVE_FOLDER_ID")
 
 ALLOWED_DEPTS = ['cse', 'it', 'me', 'sh', 'ece', 'eee']
 FACULTY_EMAIL_PATTERN = re.compile(r"^[a-zA-Z0-9._]+[.](" + "|".join(ALLOWED_DEPTS) + r")@sritcbe\.ac\.in$")
 
-# Define global variables for worksheets
 ws_users = None
 ws_visitors = None
 ws_bookings = None
 
-# --- CONNECT TO DATABASE (UNIVERSAL) ---
 def connect_to_db():
     global ws_users, ws_visitors, ws_bookings
     try:
         creds = None
-        
-        # A. Check Environment Variable (Vercel Production)
-        if os.environ.get('GOOGLE_TOKEN'):
-            token_info = json.loads(os.environ.get('GOOGLE_TOKEN'))
+        # Check Environment Variable (Preferred)
+        if os.getenv('GOOGLE_TOKEN'):
+            token_info = json.loads(os.getenv('GOOGLE_TOKEN'))
             creds = Credentials.from_authorized_user_info(token_info, ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive'])
-            
-        # B. Check Local File (Local Development)
+        # Check Local File (Fallback)
         elif os.path.exists('token.json'):
             creds = Credentials.from_authorized_user_file('token.json', ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive'])
 
         if creds:
             gc = gspread.authorize(creds)
-            sh = gc.open(SHEET_NAME)
+            # Open by ID is safer than name if name changes
+            if SHEET_ID:
+                sh = gc.open_by_key(SHEET_ID)
+            else:
+                sh = gc.open(SHEET_NAME)
+                
             ws_users = sh.worksheet("Users")
             ws_visitors = sh.worksheet("Visitors")
             ws_bookings = sh.worksheet("Bookings")
             print("✅ Connected to Google Database.")
             return True
         else:
-            print("❌ No credentials found (checked Env Var and token.json).")
+            print("❌ No credentials found.")
             return False
-            
     except Exception as e:
         print(f"❌ Connection Error: {e}")
         return False
 
-# Connect immediately on start
 connect_to_db()
 
-# --- HELPER: PARSE DEPT ---
 def get_dept_from_email(email):
     try:
         return email.split('@')[0].split('.')[-1].upper()
@@ -69,28 +71,23 @@ def get_dept_from_email(email):
         return "STAFF"
 
 # --- ROUTES ---
-# ... (Keep existing imports)
 
-# --- ROUTES ---
 @app.route('/')
 def index():
-    # Pass Firebase Config from Env Vars to the HTML
+    # [SECURE] Inject Firebase Config into the template
     firebase_config = {
-        'apiKey': os.environ.get('FIREBASE_API_KEY'),
-        'authDomain': "security-srit.firebaseapp.com",
-        'projectId': "security-srit",
-        'storageBucket': "security-srit.firebasestorage.app",
-        'messagingSenderId': "414935445280",
-        'appId': "1:414935445280:web:73771b05508c8a99c8f145"
+        'apiKey': os.getenv('FIREBASE_API_KEY'),
+        'authDomain': os.getenv('FIREBASE_AUTH_DOMAIN'),
+        'projectId': os.getenv('FIREBASE_PROJECT_ID'),
+        'storageBucket': os.getenv('FIREBASE_STORAGE_BUCKET'),
+        'messagingSenderId': os.getenv('FIREBASE_MESSAGING_SENDER_ID'),
+        'appId': os.getenv('FIREBASE_APP_ID')
     }
     return render_template('login.html', firebase_config=firebase_config)
-
-# ... (Keep the rest of the file unchanged)
 
 @app.route('/api/login', methods=['POST'])
 def api_login():
     if not ws_users: connect_to_db()
-    
     data = request.json
     email = data.get('email').lower().strip()
     name = data.get('name')
@@ -105,7 +102,7 @@ def api_login():
     except gspread.exceptions.CellNotFound:
         pass
     except Exception as e:
-        print(f"Login Sheet Error: {e}")
+        print(f"Login Error: {e}")
         pass 
 
     if FACULTY_EMAIL_PATTERN.match(email):
@@ -125,7 +122,6 @@ def api_login():
 def dashboard():
     if 'user' not in session: return redirect('/')
     role = session['role']
-    
     if not ws_visitors: connect_to_db()
 
     if role == 'Security': 
@@ -137,16 +133,13 @@ def dashboard():
         active_visitors = []
         upcoming_bookings = []
         past_bookings = []
-
         try:
-            # Fetch Visitors
             v_rows = ws_visitors.get_all_values()
             visitors_data = v_rows[1:][-20:] 
             visitors_data.reverse() 
             active_visitors = [row for row in v_rows[1:] if len(row) > 10 and row[10] == ""]
             active_visitors.reverse()
 
-            # Fetch Bookings
             b_rows = ws_bookings.get_all_values()
             for row in b_rows[1:]:
                 if len(row) > 7:
@@ -157,8 +150,9 @@ def dashboard():
             upcoming_bookings.reverse()
             past_bookings.reverse()
         except Exception as e: 
-             print(f"⚠️ Dashboard Data Error: {e}")
+             print(f"Dashboard Data Error: {e}")
 
+        # Pass IDs safely to template
         return render_template('admin_dashboard.html', 
                              visitors=visitors_data, 
                              active_visitors=active_visitors,

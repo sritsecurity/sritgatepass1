@@ -2,6 +2,8 @@ import io
 import os
 import json
 from google.oauth2.credentials import Credentials
+from dotenv import load_dotenv
+load_dotenv() # This loads the .env file variables
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 from datetime import datetime

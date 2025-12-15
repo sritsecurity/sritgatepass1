@@ -1,13 +1,27 @@
-# Security Keys (NEVER UPLOAD THESE)
-token.json
-credentials.json
-
-# Python System Files
+# Python / Flask
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
 venv/
 env/
+instance/
+.pytest_cache/
+.coverage
+htmlcov/
 
-# Editor Settings
+# Environment Variables & Secrets (Crucial)
+.env
+config.py
+secrets.json
+
+# Database
+*.db
+*.sqlite3
+
+# IDE / Editor
 .vscode/
 .idea/
+.DS_Store
+
+# Logs
+*.log
