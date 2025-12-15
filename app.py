@@ -244,6 +244,8 @@ def check_visitor():
     except: pass
     return jsonify({'found': False})
 
+# ... [Keep imports and setup code exactly as before] ...
+
 @app.route('/api/entry', methods=['POST'])
 def entry():
     if session.get('role') != 'Security': return jsonify({'error': 'Unauthorized'})
@@ -254,15 +256,19 @@ def entry():
         image_bytes = base64.b64decode(encoded)
         
         now = datetime.now()
-        filename = f"{now.strftime('%d%m%Y')}_{data['mobile']}_{now.strftime('%H%M%S')}.jpg"
+        
+        # UPDATED: Filename format: Date_Number_Timestamp.jpg (e.g., 15-12-2025_9998887776_103001.jpg)
+        filename = f"{now.strftime('%d-%m-%Y')}_{data['mobile']}_{now.strftime('%H%M%S')}.jpg"
+        
         photo_url = ""
 
-        # 1. ALWAYS USE DRIVE UPLOAD (Required for Vercel & Sync)
+        # 1. ALWAYS USE DRIVE UPLOAD
+        # The logic inside drive_manager.py handles the subfolder creation
         try:
             drive_link = upload_photo_to_drive(image_bytes, filename, DRIVE_FOLDER_ID)
             if drive_link:
                 photo_url = drive_link
-                print("✅ Uploaded to Drive")
+                print("✅ Uploaded to Drive Daily Folder")
             else:
                 raise Exception("Drive upload failed")
         except Exception as e:
@@ -297,6 +303,8 @@ def entry():
 
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)})
+
+# ... [Keep exit_visitor and main block as before] ...
 
 @app.route('/api/exit', methods=['POST'])
 def exit_visitor():

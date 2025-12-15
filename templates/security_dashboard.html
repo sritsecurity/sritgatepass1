@@ -42,7 +42,7 @@
                         <tr>
                             <th>Visitor</th>
                             <th>Mobile</th>
-                            <th>Booked By (Staff)</th>
+                            <th>Booked By</th>
                             <th>Dept</th>
                             <th>Action</th>
                         </tr>
@@ -64,15 +64,12 @@
 
                 <div class="card">
                     <h2 style="margin-top:0; color:var(--primary);">New Entry</h2>
-
                     <div style="margin-bottom:1rem;">
                         <input type="number" id="mobile" placeholder="Visitor Mobile (10 digits)"
                             onblur="checkVisitor()">
                         <div id="status-msg"></div>
                     </div>
-
                     <input type="text" id="name" placeholder="Full Name">
-
                     <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
                         <select id="designation">
                             <option value="Visitor">Visitor</option>
@@ -83,15 +80,14 @@
                         </select>
                         <input type="text" id="company" placeholder="Company / Place">
                     </div>
-
                     <input type="text" id="laptop" placeholder="Laptop (Optional)">
-
                     <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
                         <input type="text" id="to_meet" placeholder="To Meet (Staff)">
                         <input type="text" id="department" placeholder="Department">
                     </div>
 
-                    <button class="action-btn" onclick="generatePassRapid()">⚡ Print Pass (Instant)</button>
+                    <button id="printBtn" class="action-btn" onclick="generatePassAndPrint()">🖨️ Generate & Print
+                        Pass</button>
                     <p id="save-status" style="text-align:center; font-size:0.8rem; margin-top:5px; color:gray;"></p>
                 </div>
             </div>
@@ -116,12 +112,10 @@
                 <p>Visitor Gate Pass</p>
             </div>
         </div>
-
         <div class="p-meta">
-            <span>Pass No: <span id="t-pass-id"></span></span>
+            <span>Pass No: <span id="t-pass-id">...</span></span>
             <span id="t-date-time"></span>
         </div>
-
         <div class="p-body">
             <div class="p-fields">
                 <div class="p-row"><span class="p-label">Name:</span><span class="p-val" id="t-name"></span></div>
@@ -135,20 +129,15 @@
                 <img id="t-photo" class="p-photo" src="" alt="Visitor Photo">
             </div>
         </div>
-
         <div class="p-meet">
             <p><strong>To Meet:</strong> <span id="t-meet"></span></p>
             <p><strong>Department:</strong> <span id="t-dept"></span></p>
         </div>
-
         <div class="p-footer">
             <div class="p-sign">Visitor Sign</div>
             <div class="p-sign">Security Sign</div>
         </div>
-
-        <div class="p-out">
-            Out Time: __________________
-        </div>
+        <div class="p-out">Out Time: __________________</div>
     </div>
 
     <script>
@@ -165,6 +154,8 @@
 
             if (id === 'bookings') loadBookings();
         }
+
+        // ... [Keep loadBookings, processBooking, Camera logic SAME as before] ...
 
         async function loadBookings() {
             const tbody = document.getElementById('booking-list-body');
@@ -194,7 +185,6 @@
             checkVisitor();
         }
 
-        // Camera
         const video = document.getElementById('video');
         const canvas = document.createElement('canvas');
         let capturedImage = null;
@@ -236,9 +226,12 @@
             }
         }
 
-        // --- ⚡ RAPID PRINT FUNCTION ---
-        function generatePassRapid() {
+        // --- 🆕 UPDATED PRINT FUNCTION ---
+        async function generatePassAndPrint() {
             if (!capturedImage) { alert("Please capture photo!"); return; }
+
+            const btn = document.getElementById('printBtn');
+            const statusMsg = document.getElementById('save-status');
 
             // 1. Collect Data
             const payload = {
@@ -257,50 +250,58 @@
                 return;
             }
 
-            // 2. GENERATE LOCAL ID & TIME (Instant)
-            const now = new Date();
-            const timeString = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            const dateString = now.toLocaleDateString();
-            const rapidID = "G" + now.getSeconds() + Math.floor(Math.random() * 100); // e.g., G4512
-
-            // 3. FILL TICKET IMMEDIATELY
-            document.getElementById('t-pass-id').innerText = rapidID;
-            document.getElementById('t-date-time').innerText = dateString + " " + timeString;
-            document.getElementById('t-name').innerText = payload.name;
-            document.getElementById('t-designation').innerText = payload.designation;
-            document.getElementById('t-company').innerText = payload.company;
-            document.getElementById('t-mobile').innerText = payload.mobile;
-            document.getElementById('t-laptop').innerText = payload.laptop;
-            document.getElementById('t-meet').innerText = payload.to_meet;
-            document.getElementById('t-dept').innerText = payload.department;
-            document.getElementById('t-photo').src = capturedImage;
-
-            // 4. TRIGGER PRINT (Don't wait for server)
-            const statusMsg = document.getElementById('save-status');
-            statusMsg.innerText = "🖨️ Printing... (Saving to Cloud in background)";
+            // 2. DISABLE BUTTON & SHOW LOADING
+            btn.disabled = true;
+            btn.innerText = "⏳ Generating Pass ID...";
+            statusMsg.innerText = "Uploading to Server & Getting ID from Google Sheets...";
             statusMsg.style.color = "blue";
 
-            setTimeout(() => {
-                window.print();
-
-                // 5. SEND TO SERVER (Background Sync)
-                fetch('/api/entry', {
+            try {
+                // 3. SEND TO SERVER FIRST
+                const res = await fetch('/api/entry', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
-                })
-                    .then(res => res.json())
-                    .then(data => {
-                        console.log("Saved to cloud:", data);
-                        // Reload ONLY after print + save is done
-                        window.location.reload();
-                    })
-                    .catch(err => {
-                        alert("⚠️ Printed, but Save Failed! Check Internet.");
-                        console.error(err);
-                    });
+                });
 
-            }, 300); // Small delay to ensure image renders
+                const data = await res.json();
+
+                if (data.status === 'success') {
+                    // 4. FILL TICKET WITH SERVER DATA (Sequential ID)
+                    document.getElementById('t-pass-id').innerText = data.pass_id; // <--- Real Sheet Row Number
+                    document.getElementById('t-date-time').innerText = data.date + " " + data.in_time;
+
+                    document.getElementById('t-name').innerText = payload.name;
+                    document.getElementById('t-designation').innerText = payload.designation;
+                    document.getElementById('t-company').innerText = payload.company;
+                    document.getElementById('t-mobile').innerText = payload.mobile;
+                    document.getElementById('t-laptop').innerText = payload.laptop;
+                    document.getElementById('t-meet').innerText = payload.to_meet;
+                    document.getElementById('t-dept').innerText = payload.department;
+                    document.getElementById('t-photo').src = capturedImage;
+
+                    statusMsg.innerText = "✅ Saved! Printing...";
+                    statusMsg.style.color = "green";
+
+                    // 5. PRINT NOW
+                    setTimeout(() => {
+                        window.print();
+                        window.location.reload();
+                    }, 500);
+
+                } else {
+                    alert("Error: " + data.message);
+                    btn.disabled = false;
+                    btn.innerText = "🖨️ Generate & Print Pass";
+                    statusMsg.innerText = "Failed.";
+                }
+
+            } catch (err) {
+                console.error(err);
+                alert("Network Error! Check connection.");
+                btn.disabled = false;
+                btn.innerText = "🖨️ Generate & Print Pass";
+            }
         }
 
         async function markExit() {

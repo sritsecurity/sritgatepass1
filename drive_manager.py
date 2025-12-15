@@ -3,7 +3,7 @@ import os
 import json
 from google.oauth2.credentials import Credentials
 from dotenv import load_dotenv
-load_dotenv() # This loads the .env file variables
+load_dotenv()
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 from datetime import datetime
@@ -27,17 +27,50 @@ def authenticate_drive():
     
     return None
 
-def upload_photo_to_drive(image_bytes, filename, parent_id):
+def get_or_create_daily_folder(service, root_folder_id):
+    """
+    Checks for a folder named 'DD-MM-YYYY' inside the root_folder_id.
+    Creates it if it doesn't exist.
+    """
+    folder_name = datetime.now().strftime("%d-%m-%Y") # e.g., 15-12-2025
+    
+    try:
+        # Search for the folder
+        query = f"mimeType='application/vnd.google-apps.folder' and name='{folder_name}' and '{root_folder_id}' in parents and trashed=false"
+        results = service.files().list(q=query, fields='files(id)').execute()
+        files = results.get('files', [])
+
+        if files:
+            # Folder exists, return its ID
+            return files[0]['id']
+        else:
+            # Create new folder
+            file_metadata = {
+                'name': folder_name,
+                'mimeType': 'application/vnd.google-apps.folder',
+                'parents': [root_folder_id]
+            }
+            folder = service.files().create(body=file_metadata, fields='id').execute()
+            print(f"📂 Created new daily folder: {folder_name}")
+            return folder.get('id')
+            
+    except Exception as e:
+        print(f"❌ Error creating folder: {e}")
+        # Fallback to root folder if subfolder creation fails
+        return root_folder_id
+
+def upload_photo_to_drive(image_bytes, filename, root_folder_id):
     try:
         service = authenticate_drive()
         if not service: return None
 
-        # On Vercel, we can't easily search/create folders dynamically without more permissions.
-        # We will upload directly to the parent folder to keep it simple and robust.
-        
+        # 1. Get correct folder (Daily Subfolder)
+        target_folder_id = get_or_create_daily_folder(service, root_folder_id)
+
+        # 2. Upload File
         file_metadata = {
             'name': filename,
-            'parents': [parent_id]
+            'parents': [target_folder_id] # Upload to the daily subfolder
         }
         
         media = MediaIoBaseUpload(io.BytesIO(image_bytes), mimetype='image/jpeg')
@@ -48,7 +81,7 @@ def upload_photo_to_drive(image_bytes, filename, parent_id):
             fields='id, webViewLink'
         ).execute()
         
-        # Make public/reader
+        # 3. Make Public (Reader)
         try:
             service.permissions().create(
                 fileId=file.get('id'),
