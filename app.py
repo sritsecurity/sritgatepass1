@@ -326,44 +326,56 @@ def entry():
 
 # ... [Keep get_today_bookings and other routes mostly the same, ensure get_today_bookings returns vehicle if needed] ...
 # ... [Keep exit_visitor and main block as before] ...
-
 @app.route('/api/exit', methods=['POST'])
 def exit_visitor():
     data = request.json
     mobile = str(data.get('mobile')).strip()
     
     try:
-        # 1. Search for the mobile number
-        cell_list = ws_visitors.findall(mobile)
+        # 1. Get ALL data (Much more robust than 'findall')
+        # This fetches the whole sheet so we can search Python-side
+        all_rows = ws_visitors.get_all_values()
         
-        # 2. Filter: Only keep matches that are in Column 3 (Mobile Column)
-        # This prevents bugs if the mobile number matches a Vehicle No or ID by accident
-        valid_cells = [c for c in cell_list if c.col == 3]
+        target_row_index = -1
+        target_out_time = None
         
-        if not valid_cells:
-            return jsonify({'status': 'error', 'message': 'Visitor not found'})
+        # 2. Iterate BACKWARDS (From the last row up to the top)
+        # We ignore the header (row 0), hence stopping at 0
+        total_rows = len(all_rows)
         
-        # 3. Find the Active Entry
-        # We look backwards (latest first) for a row where "Out Time" (Col 11) is EMPTY
-        target_row = None
-        
-        for cell in reversed(valid_cells):
-            # Fetch the value of Column 11 (Out Time) for this row
-            out_time_val = ws_visitors.cell(cell.row, 11).value
+        for i in range(total_rows - 1, 0, -1): 
+            row = all_rows[i]
             
-            # If it's empty, this is the person currently inside!
-            if not out_time_val or str(out_time_val).strip() == "":
-                target_row = cell.row
+            # Column 3 is Mobile (Index 2 in Python list)
+            # We strictly compare the mobile number column
+            row_mobile = str(row[2]).strip()
+            
+            if row_mobile == mobile:
+                # We found the LATEST entry for this visitor
+                target_row_index = i + 1 # Convert 0-based index to Sheet Row Number
+                
+                # Check Out Time (Column 11 -> Index 10)
+                if len(row) > 10:
+                    target_out_time = row[10]
+                else:
+                    target_out_time = "" # If row is short, it's empty
+                
+                # We stop immediately because we only care about the most recent visit
                 break 
         
-        if target_row:
-            # 4. Update the specific row we found
+        # 3. Handle Results
+        if target_row_index == -1:
+             return jsonify({'status': 'error', 'message': 'Visitor not found in database'})
+             
+        # Check if they are already out
+        if not target_out_time or str(target_out_time).strip() == "":
+            # It is empty! This is the active user. Mark them out.
             out_time = datetime.now(IST).strftime("%I:%M %p")
-            ws_visitors.update_cell(target_row, 11, out_time)
+            ws_visitors.update_cell(target_row_index, 11, out_time)
             return jsonify({'status': 'success', 'out_time': out_time})
         else:
-            # If we checked all matches and they all have times, they are truly out
-            return jsonify({'status': 'error', 'message': 'Already OUT (No active entry found)'})
+            # The latest entry already has an out time
+            return jsonify({'status': 'error', 'message': f'Already OUT (Time: {target_out_time})'})
 
     except Exception as e:
         print(f"Exit Error: {e}")
