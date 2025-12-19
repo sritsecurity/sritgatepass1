@@ -54,6 +54,7 @@
                     <table>
                         <thead>
                             <tr>
+                                <th>Pass No</th>
                                 <th>Time</th>
                                 <th>Visitor</th>
                                 <th>Host</th>
@@ -64,6 +65,7 @@
                         <tbody>
                             {% for row in visitors %}
                             <tr>
+                                <td><strong>#{{ row[-1] }}</strong></td>
                                 <td>{{ row[0] }} <span
                                         style="font-size:0.8rem; color:var(--text-light); display:block;">{{ row[1]
                                         }}</span></td>
@@ -182,6 +184,10 @@
                                 <input type="text" id="v_company" placeholder="Company / Institution">
                             </div>
                             <div>
+                                <label>Vehicle Number</label>
+                                <input type="text" id="v_vehicle" placeholder="TN XX ...">
+                            </div>
+                            <div>   
                                 <label>Purpose</label>
                                 <select id="v_purpose">
                                     <option value="Official Visit">Official Visit</option>
@@ -311,6 +317,10 @@
             }
         }
     </script>
+    <div style="position: fixed; bottom: 10px; right: 15px; color: rgba(0, 0, 0, 0.3); font-size: 12px; font-family: sans-serif; font-weight: 600; pointer-events: none; z-index: 9999;">
+        Designed and Developed by Keethapriyan MR and Alan S at HIVE
+    </div>
+</body>
 </body>
 
 </html>

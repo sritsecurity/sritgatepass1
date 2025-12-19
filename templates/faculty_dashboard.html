@@ -9,89 +9,201 @@
 
 <body>
     <header class="main-header">
-        <div>
-            <h1>Faculty Portal</h1>
-            <p>Welcome, {{ session['name'] }}</p>
+        <div style="display:flex; align-items:center; gap:10px;">
+            <img src="{{ url_for('static', filename='srit_logo.png') }}" height="40"
+                style="background:white; border-radius:50%; padding:2px;">
+            <div>
+                <h1>Faculty Portal</h1>
+                <p>Welcome, {{ session['name'] }}</p>
+            </div>
         </div>
         <a href="/" class="logout-btn">Logout</a>
     </header>
 
-    <div class="container" style="max-width:700px;">
+    <div class="container" style="max-width:800px;">
         <div class="card">
-            <h2 style="margin-top:0; color:var(--primary); border-bottom:1px solid #e2e8f0; padding-bottom:1rem;">📅
-                Book a Visitor</h2>
-            <p style="color:var(--text-light); margin-bottom:2rem;">Pre-booking streamlines the entry process at the
-                security gate.</p>
+            <h2
+                style="margin-top:0; color:var(--primary); border-bottom:1px solid #e2e8f0; padding-bottom:1rem; margin-bottom:1.5rem;">
+                📅 Schedule Appointment
+            </h2>
 
             <form id="bookingForm">
-                <div class="row">
-                    <div>
-                        <label>Visitor Name</label>
-                        <input type="text" id="v_name" placeholder="Full Name" required>
+                <div style="background:#f8fafc; padding:1.5rem; border-radius:12px; margin-bottom:1.5rem;">
+                    <h4
+                        style="margin:0 0 1rem 0; color:var(--accent); border-bottom: 2px solid #e2e8f0; padding-bottom: 5px;">
+                        1. Visitor Information</h4>
+
+                    <div class="row">
+                        <div>
+                            <label>Mobile Number</label>
+                            <input type="number" id="v_mobile" placeholder="Search by mobile..." onblur="checkVisitor()"
+                                required>
+                        </div>
+                        <div>
+                            <label>Full Name</label>
+                            <input type="text" id="v_name" placeholder="Visitor Name" required>
+                        </div>
                     </div>
-                    <div>
-                        <label>Mobile Number</label>
-                        <input type="number" id="v_mobile" placeholder="10-digit Mobile" required>
+
+                    <div id="status-msg"
+                        style="margin-top:0.5rem; font-size:0.85rem; font-weight:600; min-height:20px;"></div>
+
+                    <div class="row" style="margin-top:1rem;">
+                        <div>
+                            <label>Organization</label>
+                            <input type="text" id="v_company" placeholder="Company / Institution">
+                        </div>
+                        <div>
+                            <label>Vehicle Number</label>
+                            <input type="text" id="v_vehicle" placeholder="TN XX ...">
+                        </div>
+                        <div>
+                            <label>Purpose</label>
+                            <select id="v_purpose">
+                                <option value="Official Visit">Official Visit</option>
+                                <option value="Meeting">Meeting</option>
+                                <option value="Inspection">Inspection</option>
+                                <option value="Guest Lecture">Guest Lecture</option>
+                                <option value="Personal">Personal</option>
+                                <option value="Others">Others</option>
+                            </select>
+                        </div>
                     </div>
                 </div>
 
-                <div class="row">
-                    <div>
-                        <label>Purpose</label>
-                        <select id="v_purpose">
-                            <option value="Guest Lecture">Guest Lecture</option>
-                            <option value="Personal">Personal</option>
-                            <option value="Event Judge">Event Judge</option>
-                            <option value="Parent Meeting">Parent Meeting</option>
-                            <option value="Vendor">Vendor/Service</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label>Organization (Optional)</label>
-                        <input type="text" id="v_company" placeholder="e.g. Bosch">
+                <div style="background:#f8fafc; padding:1.5rem; border-radius:12px;">
+                    <h4
+                        style="margin:0 0 1rem 0; color:var(--accent); border-bottom: 2px solid #e2e8f0; padding-bottom: 5px;">
+                        2. Meeting Details</h4>
+                    <div class="row">
+                        <div>
+                            <label>Host Name</label>
+                            <input type="text" id="host_name" value="{{ session['name'] }}" readonly
+                                style="background-color: #e9ecef; cursor: not-allowed;">
+                        </div>
+                        <div>
+                            <label>Department</label>
+                            <input type="text" id="host_dept" value="{{ session['dept'] }}" readonly
+                                style="background-color: #e9ecef; cursor: not-allowed; color: #555; font-weight: 600;">
+                        </div>
                     </div>
                 </div>
 
-                <button type="button" class="action-btn" onclick="submitBooking()">✅ Confirm Booking</button>
+                <button type="button" class="action-btn" onclick="submitBooking()"
+                    style="margin-top:1.5rem; width:100%;">✅ Confirm Appointment</button>
                 <p id="msg" style="text-align:center; margin-top:1rem; font-weight:600;"></p>
             </form>
         </div>
     </div>
 
     <script>
+        // --- AUTO FETCH FUNCTION ---
+        async function checkVisitor() {
+            const mobile = document.getElementById('v_mobile').value;
+            const msg = document.getElementById('status-msg');
+
+            // Clear if empty
+            if (mobile.length !== 10) {
+                msg.innerText = "";
+                return;
+            }
+
+            msg.innerText = "🔍 Checking Database...";
+            msg.style.color = "var(--text-light)";
+
+            try {
+                // Calls the existing API to find visitor
+                const res = await fetch(`/api/check_visitor?mobile=${mobile}`);
+                const data = await res.json();
+
+                if (data.found) {
+                    // Auto-fill fields if found
+                    document.getElementById('v_name').value = data.name || "";
+                    document.getElementById('v_company').value = data.company || "";
+
+                    if (data.vehicle) {
+                        document.getElementById('v_vehicle').value = data.vehicle;
+                    }
+
+                    msg.innerHTML = "✨ Visitor Found! Details Auto-filled.";
+                    msg.style.color = "var(--success)";
+                } else {
+                    msg.innerHTML = "📝 New Visitor";
+                    msg.style.color = "var(--primary)";
+                }
+            } catch (e) {
+                console.error(e);
+                msg.innerText = "⚠️ Network Error checking visitor";
+                msg.style.color = "red";
+            }
+        }
+
+        // --- SUBMIT FUNCTION ---
         async function submitBooking() {
             const btn = document.querySelector('.action-btn');
             const msg = document.getElementById('msg');
+
+            // Basic Validation
+            const name = document.getElementById('v_name').value;
+            const mobile = document.getElementById('v_mobile').value;
+
+            if (!name || !mobile || mobile.length !== 10) {
+                alert("Please provide valid Name and 10-digit Mobile Number");
+                return;
+            }
+
             btn.innerText = "Processing...";
             btn.disabled = true;
 
             const data = {
-                name: document.getElementById('v_name').value,
-                mobile: document.getElementById('v_mobile').value,
+                name: name,
+                mobile: mobile,
+                company: document.getElementById('v_company').value,
+                vehicle: document.getElementById('v_vehicle').value,
                 purpose: document.getElementById('v_purpose').value,
-                company: document.getElementById('v_company').value
+                // Host details are taken from session in backend for security,
+                // but we send them for completeness if logic changes later.
+                to_meet: document.getElementById('host_name').value
             };
 
-            const res = await fetch('/api/book_visitor', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data)
-            });
-            const result = await res.json();
+            try {
+                const res = await fetch('/api/book_visitor', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                const result = await res.json();
 
-            if (result.status === 'success') {
-                msg.innerText = "Booking Confirmed! Security notified.";
-                msg.style.color = "var(--success)";
-                document.getElementById('bookingForm').reset();
-                setTimeout(() => { btn.innerText = "✅ Confirm Booking"; btn.disabled = false; msg.innerText = ""; }, 3000);
-            } else {
-                msg.innerText = "Error: " + result.message;
-                msg.style.color = "var(--danger)";
-                btn.innerText = "✅ Confirm Booking";
+                if (result.status === 'success') {
+                    msg.innerText = "✅ Appointment Scheduled Successfully!";
+                    msg.style.color = "var(--success)";
+                    document.getElementById('bookingForm').reset();
+                    // Reset read-only fields visual state if needed
+                    document.getElementById('status-msg').innerText = "";
+
+                    setTimeout(() => {
+                        btn.innerText = "✅ Confirm Appointment";
+                        btn.disabled = false;
+                        msg.innerText = "";
+                    }, 3000);
+                } else {
+                    msg.innerText = "❌ Error: " + result.message;
+                    msg.style.color = "var(--danger)";
+                    btn.innerText = "✅ Confirm Appointment";
+                    btn.disabled = false;
+                }
+            } catch (e) {
+                msg.innerText = "⚠️ Network Error";
+                msg.style.color = "red";
                 btn.disabled = false;
             }
         }
     </script>
+
+    <div
+        style="position: fixed; bottom: 10px; right: 15px; color: rgba(0, 0, 0, 0.3); font-size: 12px; font-family: sans-serif; font-weight: 600; pointer-events: none; z-index: 9999;">
+        Designed and Developed by Keethapriyan MR and Alan S at HIVE
+    </div>
 </body>
 
 </html>

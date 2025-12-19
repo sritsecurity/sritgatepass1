@@ -50,6 +50,7 @@ async function checkVisitor() {
         document.getElementById('name').value = data.name;
         document.getElementById('designation').value = data.designation;
         document.getElementById('company').value = data.company;
+        document.getElementById('vehicle').value = data.vehicle || "";
         msgElement.innerText = "Visitor Found! Details Autofilled.";
         msgElement.style.color = "green";
     } else {
@@ -75,6 +76,7 @@ async function generatePass() {
         name: document.getElementById('name').value,
         designation: document.getElementById('designation').value,
         company: document.getElementById('company').value,
+        vehicle_number: document.getElementById('vehicle').value,
         laptop: document.getElementById('laptop').value || "None",
         to_meet: document.getElementById('to_meet').value,
         department: document.getElementById('department').value,
@@ -105,6 +107,7 @@ async function generatePass() {
         document.getElementById('t-company').innerText = data.company;
         document.getElementById('t-mobile').innerText = data.mobile;
         document.getElementById('t-laptop').innerText = data.laptop;
+        document.getElementById('t-vehicle').innerText = data.vehicle_number;
         
         document.getElementById('t-meet').innerText = data.to_meet;
         document.getElementById('t-dept').innerText = data.department;

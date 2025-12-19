@@ -5,6 +5,20 @@
     <meta charset="UTF-8">
     <title>SRIT Security Dashboard</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        /* --- PRINT STYLES FOR TICKET --- */
+        .p-hive-footer {
+            margin-top: 15px;
+            text-align: center;
+            font-size: 10px;
+            font-weight: 600;
+            font-family: sans-serif;
+            color: #000;
+            border-top: 1px solid #ccc;
+            padding-top: 5px;
+            width: 100%;
+        }
+    </style>
 </head>
 
 <body>
@@ -80,14 +94,16 @@
                         </select>
                         <input type="text" id="company" placeholder="Company / Place">
                     </div>
-                    <input type="text" id="laptop" placeholder="Laptop (Optional)">
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                        <input type="text" id="laptop" placeholder="Laptop (Optional)">
+                        <input type="text" id="vehicle" placeholder="Vehicle No. (TN XX...)">
+                    </div>
                     <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
                         <input type="text" id="to_meet" placeholder="To Meet (Staff)">
                         <input type="text" id="department" placeholder="Department">
                     </div>
 
-                    <button id="printBtn" class="action-btn" onclick="generatePassAndPrint()">🖨️ Generate & Print
-                        Pass</button>
+                    <button id="printBtn" class="action-btn" onclick="generatePassAndPrint()">🖨️ Print & Save</button>
                     <p id="save-status" style="text-align:center; font-size:0.8rem; margin-top:5px; color:gray;"></p>
                 </div>
             </div>
@@ -124,6 +140,7 @@
                 <div class="p-row"><span class="p-label">From:</span><span class="p-val" id="t-company"></span></div>
                 <div class="p-row"><span class="p-label">Mobile:</span><span class="p-val" id="t-mobile"></span></div>
                 <div class="p-row"><span class="p-label">Laptop:</span><span class="p-val" id="t-laptop"></span></div>
+                <div class="p-row"><span class="p-label">Vehicle:</span><span class="p-val" id="t-vehicle"></span></div>
             </div>
             <div class="p-photo-box">
                 <img id="t-photo" class="p-photo" src="" alt="Visitor Photo">
@@ -138,6 +155,7 @@
             <div class="p-sign">Security Sign</div>
         </div>
         <div class="p-out">Out Time: __________________</div>
+        <div class="p-hive-footer">Designed and Developed by HIVE</div>
     </div>
 
     <script>
@@ -146,37 +164,31 @@
             document.querySelectorAll('.tab-content').forEach(d => d.classList.remove('active'));
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
             document.getElementById(id).classList.add('active');
-
-            const btns = document.querySelectorAll('.tab-btn');
-            if (id === 'bookings') btns[0].classList.add('active');
-            if (id === 'entry') btns[1].classList.add('active');
-            if (id === 'exit') btns[2].classList.add('active');
-
             if (id === 'bookings') loadBookings();
         }
-
-        // ... [Keep loadBookings, processBooking, Camera logic SAME as before] ...
 
         async function loadBookings() {
             const tbody = document.getElementById('booking-list-body');
             tbody.innerHTML = "<tr><td colspan='5' style='text-align:center'>Loading...</td></tr>";
-            const res = await fetch('/api/get_today_bookings');
-            const data = await res.json();
-            tbody.innerHTML = "";
-            if (data.length === 0) {
-                tbody.innerHTML = "<tr><td colspan='5' style='text-align:center'>No pending bookings today.</td></tr>";
-                return;
-            }
-            data.forEach(b => {
-                tbody.innerHTML += `
-                    <tr>
-                        <td><strong>${b.visitor}</strong></td>
-                        <td>${b.mobile}</td>
-                        <td>${b.booked_by}</td>
-                        <td><span style="background:#e2e8f0; padding:2px 6px; border-radius:4px; font-size:0.8rem;">${b.dept}</span></td>
-                        <td><button class="btn-sm action-btn" style="margin:0; width:auto; padding:5px 10px;" onclick="processBooking('${b.mobile}')">Process</button></td>
-                    </tr>`;
-            });
+            try {
+                const res = await fetch('/api/get_today_bookings');
+                const data = await res.json();
+                tbody.innerHTML = "";
+                if (data.length === 0) {
+                    tbody.innerHTML = "<tr><td colspan='5' style='text-align:center'>No pending bookings today.</td></tr>";
+                    return;
+                }
+                data.forEach(b => {
+                    tbody.innerHTML += `
+                        <tr>
+                            <td><strong>${b.visitor}</strong></td>
+                            <td>${b.mobile}</td>
+                            <td>${b.booked_by}</td>
+                            <td><span style="background:#e2e8f0; padding:2px 6px; border-radius:4px; font-size:0.8rem;">${b.dept}</span></td>
+                            <td><button class="btn-sm action-btn" style="margin:0; width:auto; padding:5px 10px;" onclick="processBooking('${b.mobile}')">Process</button></td>
+                        </tr>`;
+                });
+            } catch (e) { tbody.innerHTML = "<tr><td colspan='5'>Error loading bookings</td></tr>"; }
         }
 
         function processBooking(mobile) {
@@ -213,94 +225,96 @@
                 document.getElementById('name').value = data.name || "";
                 document.getElementById('company').value = data.company || "";
                 document.getElementById('laptop').value = data.laptop || "";
+                document.getElementById('vehicle').value = data.vehicle || ""; // Auto-fill Vehicle
                 document.getElementById('to_meet').value = data.to_meet || "";
                 document.getElementById('department').value = data.department || "";
-
-                if (data.is_booking) {
-                    msg.innerHTML = `<div style="background:#c6f6d5; color:#22543d; padding:8px; border-radius:6px;">✅ Pre-Booked by ${data.booked_by}</div>`;
-                } else {
-                    msg.innerHTML = `<div style="background:#bee3f8; color:#2c5282; padding:8px; border-radius:6px;">ℹ️ Returning Visitor</div>`;
-                }
-            } else {
-                msg.innerHTML = `<div style="background:#e2e8f0; color:#4a5568; padding:8px; border-radius:6px;">New Visitor</div>`;
+                if (data.is_booking) msg.innerHTML = "✅ Pre-Booked";
+                else msg.innerHTML = "ℹ️ Returning Visitor";
             }
         }
 
-        // --- 🆕 UPDATED PRINT FUNCTION ---
         async function generatePassAndPrint() {
             if (!capturedImage) { alert("Please capture photo!"); return; }
 
             const btn = document.getElementById('printBtn');
             const statusMsg = document.getElementById('save-status');
 
-            // 1. Collect Data
+            // 1. Collect Data (Added vehicle)
             const payload = {
                 mobile: document.getElementById('mobile').value,
                 name: document.getElementById('name').value,
                 designation: document.getElementById('designation').value,
                 company: document.getElementById('company').value,
                 laptop: document.getElementById('laptop').value,
+                vehicle: document.getElementById('vehicle').value,
                 to_meet: document.getElementById('to_meet').value,
                 department: document.getElementById('department').value,
                 image: capturedImage
             };
 
-            if (!payload.mobile || !payload.name) {
-                alert("Please enter Name and Mobile");
-                return;
-            }
+            if (!payload.mobile || !payload.name) { alert("Please enter Name and Mobile"); return; }
 
-            // 2. DISABLE BUTTON & SHOW LOADING
             btn.disabled = true;
-            btn.innerText = "⏳ Generating Pass ID...";
-            statusMsg.innerText = "Uploading to Server & Getting ID from Google Sheets...";
-            statusMsg.style.color = "blue";
+            btn.innerText = "⏳ Preparing...";
+            statusMsg.innerText = "Getting Pass ID...";
 
             try {
-                // 3. SEND TO SERVER FIRST
-                const res = await fetch('/api/entry', {
+                // 2. FAST: Get Sequential ID Only
+                const idRes = await fetch('/api/get_next_id');
+                const idData = await idRes.json();
+                const passID = idData.next_id || "---";
+
+                // 3. Update Ticket UI
+                const now = new Date();
+                const dateStr = now.toLocaleDateString('en-GB');
+                const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+
+                document.getElementById('t-pass-id').innerText = passID;
+                document.getElementById('t-date-time').innerText = dateStr + " " + timeStr;
+                document.getElementById('t-name').innerText = payload.name;
+                document.getElementById('t-designation').innerText = payload.designation;
+                document.getElementById('t-company').innerText = payload.company;
+                document.getElementById('t-mobile').innerText = payload.mobile;
+                document.getElementById('t-laptop').innerText = payload.laptop;
+                document.getElementById('t-vehicle').innerText = payload.vehicle; // Show on Pass
+                document.getElementById('t-meet').innerText = payload.to_meet;
+                document.getElementById('t-dept').innerText = payload.department;
+                document.getElementById('t-photo').src = capturedImage;
+
+                // 4. START UPLOAD
+                statusMsg.innerText = "🔄 Syncing to Cloud...";
+                statusMsg.style.color = "blue";
+
+                const uploadPromise = fetch('/api/entry', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
 
-                const data = await res.json();
+                // 5. PRINT
+                setTimeout(() => {
+                    window.print();
 
-                if (data.status === 'success') {
-                    // 4. FILL TICKET WITH SERVER DATA (Sequential ID)
-                    document.getElementById('t-pass-id').innerText = data.pass_id; // <--- Real Sheet Row Number
-                    document.getElementById('t-date-time').innerText = data.date + " " + data.in_time;
-
-                    document.getElementById('t-name').innerText = payload.name;
-                    document.getElementById('t-designation').innerText = payload.designation;
-                    document.getElementById('t-company').innerText = payload.company;
-                    document.getElementById('t-mobile').innerText = payload.mobile;
-                    document.getElementById('t-laptop').innerText = payload.laptop;
-                    document.getElementById('t-meet').innerText = payload.to_meet;
-                    document.getElementById('t-dept').innerText = payload.department;
-                    document.getElementById('t-photo').src = capturedImage;
-
-                    statusMsg.innerText = "✅ Saved! Printing...";
-                    statusMsg.style.color = "green";
-
-                    // 5. PRINT NOW
-                    setTimeout(() => {
-                        window.print();
-                        window.location.reload();
-                    }, 500);
-
-                } else {
-                    alert("Error: " + data.message);
-                    btn.disabled = false;
-                    btn.innerText = "🖨️ Generate & Print Pass";
-                    statusMsg.innerText = "Failed.";
-                }
+                    uploadPromise.then(res => res.json()).then(data => {
+                        if (data.status === 'success') {
+                            statusMsg.innerText = "✅ Saved to Sheets & Drive!";
+                            statusMsg.style.color = "green";
+                            setTimeout(() => window.location.reload(), 1000);
+                        } else {
+                            statusMsg.innerText = "⚠️ Print OK, but Save Failed: " + data.message;
+                            statusMsg.style.color = "red";
+                            btn.disabled = false;
+                        }
+                    }).catch(err => {
+                        statusMsg.innerText = "⚠️ Network Error during save.";
+                    });
+                }, 500);
 
             } catch (err) {
                 console.error(err);
-                alert("Network Error! Check connection.");
+                alert("Network Error! Could not get Pass ID.");
                 btn.disabled = false;
-                btn.innerText = "🖨️ Generate & Print Pass";
+                btn.innerText = "🖨️ Print & Save";
             }
         }
 
@@ -308,12 +322,16 @@
             const mobile = document.getElementById('exit-mobile').value;
             const res = await fetch('/api/exit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mobile }) });
             const data = await res.json();
-            alert(data.message || "Marked OUT: " + data.out_time);
+            alert(data.message || "Marked OUT");
             if (data.status === 'success') document.getElementById('exit-mobile').value = "";
         }
 
         loadBookings();
     </script>
+    <div
+        style="position: fixed; bottom: 10px; right: 15px; color: rgba(0, 0, 0, 0.3); font-size: 12px; font-family: sans-serif; font-weight: 600; pointer-events: none; z-index: 9999;">
+        Designed and Developed by Keethapriyan MR and Alan S at HIVE
+    </div>
 </body>
 
 </html>
