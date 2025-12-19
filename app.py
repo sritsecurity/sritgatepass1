@@ -330,17 +330,44 @@ def entry():
 @app.route('/api/exit', methods=['POST'])
 def exit_visitor():
     data = request.json
+    mobile = str(data.get('mobile')).strip()
+    
     try:
-        cell_list = ws_visitors.findall(str(data.get('mobile')))
-        if not cell_list: return jsonify({'status': 'error', 'message': 'Visitor not found'})
-        last_cell = cell_list[-1]
+        # 1. Search for the mobile number
+        cell_list = ws_visitors.findall(mobile)
         
-        if ws_visitors.cell(last_cell.row, 11).value: return jsonify({'status': 'error', 'message': 'Already OUT'})
-        # FIX: Use IST for Exit Time
-        ws_visitors.update_cell(last_cell.row, 11, datetime.now(IST).strftime("%I:%M %p"))
-        return jsonify({'status': 'success', 'out_time': datetime.now(IST).strftime("%I:%M %p")})
-    except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)})
+        # 2. Filter: Only keep matches that are in Column 3 (Mobile Column)
+        # This prevents bugs if the mobile number matches a Vehicle No or ID by accident
+        valid_cells = [c for c in cell_list if c.col == 3]
+        
+        if not valid_cells:
+            return jsonify({'status': 'error', 'message': 'Visitor not found'})
+        
+        # 3. Find the Active Entry
+        # We look backwards (latest first) for a row where "Out Time" (Col 11) is EMPTY
+        target_row = None
+        
+        for cell in reversed(valid_cells):
+            # Fetch the value of Column 11 (Out Time) for this row
+            out_time_val = ws_visitors.cell(cell.row, 11).value
+            
+            # If it's empty, this is the person currently inside!
+            if not out_time_val or str(out_time_val).strip() == "":
+                target_row = cell.row
+                break 
+        
+        if target_row:
+            # 4. Update the specific row we found
+            out_time = datetime.now(IST).strftime("%I:%M %p")
+            ws_visitors.update_cell(target_row, 11, out_time)
+            return jsonify({'status': 'success', 'out_time': out_time})
+        else:
+            # If we checked all matches and they all have times, they are truly out
+            return jsonify({'status': 'error', 'message': 'Already OUT (No active entry found)'})
 
+    except Exception as e:
+        print(f"Exit Error: {e}")
+        return jsonify({'status': 'error', 'message': str(e)})
+    
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
