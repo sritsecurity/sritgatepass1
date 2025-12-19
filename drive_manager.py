@@ -1,6 +1,7 @@
 import io
 import os
 import json
+import pytz # NEW: For Timezone
 from google.oauth2.credentials import Credentials
 from dotenv import load_dotenv
 load_dotenv()
@@ -9,6 +10,9 @@ from googleapiclient.http import MediaIoBaseUpload
 from datetime import datetime
 
 SCOPES = ['https://www.googleapis.com/auth/drive']
+
+# NEW: Define IST Timezone
+IST = pytz.timezone('Asia/Kolkata')
 
 def authenticate_drive():
     # 1. Try Loading from Environment Variable (Vercel Production)
@@ -29,11 +33,16 @@ def authenticate_drive():
 
 def get_or_create_daily_folder(service, root_folder_id):
     """
-    Checks for a folder named 'DD-MM-YYYY' inside the root_folder_id.
+    Checks for a folder named 'DD-MM-YYYY' (in IST) inside the root_folder_id.
     Creates it if it doesn't exist.
     """
-    folder_name = datetime.now().strftime("%d-%m-%Y") # e.g., 15-12-2025
+    # FIX: Use IST instead of Server Time (UTC)
+    folder_name = datetime.now(IST).strftime("%d-%m-%Y")
     
+    if not root_folder_id:
+        print("⚠️ Warning: root_folder_id is Missing! Uploading to Drive Root.")
+        return None
+
     try:
         # Search for the folder
         query = f"mimeType='application/vnd.google-apps.folder' and name='{folder_name}' and '{root_folder_id}' in parents and trashed=false"
@@ -41,7 +50,6 @@ def get_or_create_daily_folder(service, root_folder_id):
         files = results.get('files', [])
 
         if files:
-            # Folder exists, return its ID
             return files[0]['id']
         else:
             # Create new folder
@@ -55,7 +63,7 @@ def get_or_create_daily_folder(service, root_folder_id):
             return folder.get('id')
             
     except Exception as e:
-        print(f"❌ Error creating folder: {e}")
+        print(f"❌ Error creating/finding daily folder: {e}")
         # Fallback to root folder if subfolder creation fails
         return root_folder_id
 
@@ -67,11 +75,10 @@ def upload_photo_to_drive(image_bytes, filename, root_folder_id):
         # 1. Get correct folder (Daily Subfolder)
         target_folder_id = get_or_create_daily_folder(service, root_folder_id)
 
-        # 2. Upload File
-        file_metadata = {
-            'name': filename,
-            'parents': [target_folder_id] # Upload to the daily subfolder
-        }
+        # 2. Upload File (If target is None, it uploads to Root)
+        file_metadata = {'name': filename}
+        if target_folder_id:
+            file_metadata['parents'] = [target_folder_id]
         
         media = MediaIoBaseUpload(io.BytesIO(image_bytes), mimetype='image/jpeg')
         
