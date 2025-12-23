@@ -78,13 +78,11 @@
                     <div class="row">
                         <div>
                             <label>Host Name</label>
-                            <input type="text" id="host_name" value="{{ session['name'] }}" readonly
-                                style="background-color: #e9ecef; cursor: not-allowed;">
+                            <input type="text" id="host_name" value="{{ session['name'] }}" style="font-weight:600;">
                         </div>
                         <div>
                             <label>Department</label>
-                            <input type="text" id="host_dept" value="{{ session['dept'] }}" readonly
-                                style="background-color: #e9ecef; cursor: not-allowed; color: #555; font-weight: 600;">
+                            <input type="text" id="host_dept" value="{{ session['dept'] }}" style="font-weight:600;">
                         </div>
                     </div>
                 </div>
@@ -94,6 +92,27 @@
                 <p id="msg" style="text-align:center; margin-top:1rem; font-weight:600;"></p>
             </form>
         </div>
+
+        <div class="card">
+            <h3 style="margin-top:0; border-bottom:1px solid #eee; padding-bottom:10px;">📜 My Booking History</h3>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Visitor</th>
+                            <th>Mobile</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="my-bookings-body">
+                        <tr>
+                            <td colspan="4" style="text-align:center">Loading history...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -102,27 +121,27 @@
             const mobile = document.getElementById('v_mobile').value;
             const msg = document.getElementById('status-msg');
 
-            // Clear if empty
-            if (mobile.length !== 10) {
-                msg.innerText = "";
-                return;
-            }
+            if (mobile.length !== 10) { msg.innerText = ""; return; }
 
             msg.innerText = "🔍 Checking Database...";
             msg.style.color = "var(--text-light)";
 
             try {
-                // Calls the existing API to find visitor
                 const res = await fetch(`/api/check_visitor?mobile=${mobile}`);
                 const data = await res.json();
 
                 if (data.found) {
-                    // Auto-fill fields if found
                     document.getElementById('v_name').value = data.name || "";
                     document.getElementById('v_company').value = data.company || "";
+                    if (data.vehicle) document.getElementById('v_vehicle').value = data.vehicle;
 
-                    if (data.vehicle) {
-                        document.getElementById('v_vehicle').value = data.vehicle;
+                    // AUTO-FETCH HOST from Last Visit (Optional feature requested)
+                    if (data.to_meet && data.department) {
+                        // We set it only if user wants it, or we just pre-fill. 
+                        // Since you wanted autofill logic, here it is:
+                        // Uncomment if you want to overwrite session defaults aggressively
+                        // document.getElementById('host_name').value = data.to_meet;
+                        // document.getElementById('host_dept').value = data.department;
                     }
 
                     msg.innerHTML = "✨ Visitor Found! Details Auto-filled.";
@@ -143,7 +162,6 @@
             const btn = document.querySelector('.action-btn');
             const msg = document.getElementById('msg');
 
-            // Basic Validation
             const name = document.getElementById('v_name').value;
             const mobile = document.getElementById('v_mobile').value;
 
@@ -161,9 +179,8 @@
                 company: document.getElementById('v_company').value,
                 vehicle: document.getElementById('v_vehicle').value,
                 purpose: document.getElementById('v_purpose').value,
-                // Host details are taken from session in backend for security,
-                // but we send them for completeness if logic changes later.
-                to_meet: document.getElementById('host_name').value
+                to_meet: document.getElementById('host_name').value, // Use the Editable Field
+                department: document.getElementById('host_dept').value // Use the Editable Field
             };
 
             try {
@@ -178,14 +195,8 @@
                     msg.innerText = "✅ Appointment Scheduled Successfully!";
                     msg.style.color = "var(--success)";
                     document.getElementById('bookingForm').reset();
-                    // Reset read-only fields visual state if needed
-                    document.getElementById('status-msg').innerText = "";
-
-                    setTimeout(() => {
-                        btn.innerText = "✅ Confirm Appointment";
-                        btn.disabled = false;
-                        msg.innerText = "";
-                    }, 3000);
+                    // Restore defaults from session (hidden way or reload)
+                    setTimeout(() => window.location.reload(), 2000);
                 } else {
                     msg.innerText = "❌ Error: " + result.message;
                     msg.style.color = "var(--danger)";
@@ -198,8 +209,36 @@
                 btn.disabled = false;
             }
         }
-    </script>
 
+        // --- LOAD MY BOOKINGS ---
+        async function loadMyBookings() {
+            try {
+                const res = await fetch('/api/get_user_bookings');
+                const data = await res.json();
+                const tbody = document.getElementById('my-bookings-body');
+                tbody.innerHTML = "";
+
+                if (data.length === 0) {
+                    tbody.innerHTML = "<tr><td colspan='4' style='text-align:center; padding:15px;'>No previous bookings found.</td></tr>";
+                    return;
+                }
+
+                data.forEach(row => {
+                    let badgeColor = row.status === 'Arrived' ? 'green' : 'yellow';
+                    tbody.innerHTML += `
+                        <tr>
+                            <td>${row.time.split(' ')[0]}</td>
+                            <td>${row.visitor}</td>
+                            <td>${row.mobile}</td>
+                            <td><span class="badge badge-${badgeColor}">${row.status}</span></td>
+                        </tr>
+                    `;
+                });
+            } catch (e) { console.error("Error loading history", e); }
+        }
+
+        loadMyBookings();
+    </script>
     <div
         style="position: fixed; bottom: 10px; right: 15px; color: rgba(0, 0, 0, 0.3); font-size: 12px; font-family: sans-serif; font-weight: 600; pointer-events: none; z-index: 9999;">
         Designed and Developed by Keethapriyan MR and Alan S at HIVE

@@ -1,10 +1,14 @@
+# app.py
 import os
 import re
 import json
 import base64
 import pytz
+import csv
 from datetime import datetime
 from dotenv import load_dotenv
+from io import StringIO
+from flask import Response
 
 # Load env vars before anything else
 load_dotenv() 
@@ -32,10 +36,10 @@ FACULTY_EMAIL_PATTERN = re.compile(r"^[a-zA-Z0-9._]+[.](" + "|".join(ALLOWED_DEP
 DEPT_MAPPING = {
     'cse': 'CSE',
     'it': 'IT',
-    'me': 'MECH',          # Mapped .me to MECH
+    'me': 'MECH',
     'ece': 'ECE',
     'eee': 'EEE',
-    'sh': 'Science and Humanities', # Mapped .sh to full name
+    'sh': 'Science and Humanities',
     'ce': 'CIVIL'
 }
 
@@ -47,17 +51,14 @@ def connect_to_db():
     global ws_users, ws_visitors, ws_bookings
     try:
         creds = None
-        # Check Environment Variable (Preferred)
         if os.getenv('GOOGLE_TOKEN'):
             token_info = json.loads(os.getenv('GOOGLE_TOKEN'))
             creds = Credentials.from_authorized_user_info(token_info, ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive'])
-        # Check Local File (Fallback)
         elif os.path.exists('token.json'):
             creds = Credentials.from_authorized_user_file('token.json', ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive'])
 
         if creds:
             gc = gspread.authorize(creds)
-            # Open by ID is safer than name if name changes
             if SHEET_ID:
                 sh = gc.open_by_key(SHEET_ID)
             else:
@@ -130,7 +131,6 @@ def api_login():
     except: pass 
 
     return jsonify({'status': 'error', 'message': 'Access Denied: User not found.'})
-# ... [Rest of app.py] ...
 
 @app.route('/dashboard')
 def dashboard():
@@ -173,7 +173,6 @@ def book_visitor():
     if session.get('role') not in ['Faculty', 'Admin']: return jsonify({'error': 'Unauthorized'})
     data = request.json
     
-    # Check Duplicates
     try:
         mobile_to_check = str(data.get('mobile')).strip()
         all_bookings = ws_bookings.get_all_values()
@@ -185,16 +184,11 @@ def book_visitor():
                     return jsonify({'status': 'error', 'message': 'Duplicate: Visitor has pending booking.'})
     except: pass
 
-    if session['role'] == 'Admin':
-        host_name = data.get('to_meet', session['name'])
-        host_dept = data.get('department', 'ADMIN')
-        booked_by_email = session['user']
-    else:
-        host_name = session['name']
-        host_dept = get_dept_from_email(session['user'])
-        booked_by_email = session['user']
+    # Use provided host details if available (Editable Fields), else fallback to Session
+    host_name = data.get('to_meet', session['name'])
+    host_dept = data.get('department', session.get('dept', 'STAFF'))
+    booked_by_email = session['user']
 
-    # FIX: Use IST for Booking Time
     row = [
         datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S"),
         booked_by_email,
@@ -236,6 +230,56 @@ def get_today_bookings():
         return jsonify(pending_list)
     except: return jsonify([])
 
+# NEW: Endpoint for Faculty to see their bookings
+@app.route('/api/get_user_bookings', methods=['GET'])
+def get_user_bookings():
+    if 'user' not in session: return jsonify([])
+    try:
+        if not ws_bookings: connect_to_db()
+        all_rows = ws_bookings.get_all_values()
+        my_bookings = []
+        user_email = session['user']
+        
+        # Iterate and filter by "Booked By" (Col 2, index 1)
+        for row in all_rows[1:]:
+            if len(row) > 1 and row[1] == user_email:
+                my_bookings.append({
+                    'time': row[0],
+                    'visitor': row[5],
+                    'mobile': row[4],
+                    'purpose': row[6],
+                    'status': row[7]
+                })
+        # Return newest first
+        return jsonify(list(reversed(my_bookings)))
+    except Exception as e:
+        return jsonify([])
+
+# NEW: Endpoint for Security to get Active Visitors Table
+@app.route('/api/get_active_visitors', methods=['GET'])
+def get_active_visitors():
+    if session.get('role') != 'Security': return jsonify([])
+    try:
+        if not ws_visitors: connect_to_db()
+        all_rows = ws_visitors.get_all_values()
+        active_list = []
+        
+        # Skip header, iterate all
+        for row in all_rows[1:]:
+            # Check if OUT TIME (Col 11, index 10) is empty
+            if len(row) > 10 and row[10] == "":
+                active_list.append({
+                    'in_time': row[1],
+                    'mobile': row[2],
+                    'name': row[3],
+                    'vehicle': row[12] if len(row) > 12 else "-",
+                    'to_meet': row[7],
+                    'dept': row[8],
+                    'photo': row[9]
+                })
+        return jsonify(list(reversed(active_list))) # Show latest first
+    except: return jsonify([])
+
 @app.route('/api/check_visitor', methods=['GET'])
 def check_visitor():
     mobile = request.args.get('mobile')
@@ -253,15 +297,17 @@ def check_visitor():
         if cells:
             row = ws_visitors.row_values(cells[-1].row)
             vehicle = row[12] if len(row) > 12 else ""
-            return jsonify({'found': True, 'is_booking': False, 'name': row[3], 'designation': row[4], 'company': row[5], 'laptop': row[6], 'to_meet': row[7], 'department': row[8], 'vehicle': vehicle})
+            # Returns data from LAST visit
+            return jsonify({
+                'found': True, 'is_booking': False, 
+                'name': row[3], 'designation': row[4], 
+                'company': row[5], 'laptop': row[6], 
+                'to_meet': row[7], 'department': row[8], 
+                'vehicle': vehicle
+            })
     except: pass
     return jsonify({'found': False})
 
-# ... [Keep imports and setup code exactly as before] ...
-
-# ... [Keep all previous imports and setup] ...
-
-# --- ADD THIS NEW ROUTE BEFORE THE 'entry' ROUTE ---
 @app.route('/api/get_next_id', methods=['GET'])
 def get_next_id():
     try:
@@ -269,8 +315,6 @@ def get_next_id():
         current_count = len(ws_visitors.col_values(1)) 
         return jsonify({'next_id': current_count})
     except: return jsonify({'next_id': '---'})
-
-# ... [Rest of app.py remains the same] ...
 
 @app.route('/api/entry', methods=['POST'])
 def entry():
@@ -281,13 +325,11 @@ def entry():
         header, encoded = image_data.split(",", 1)
         image_bytes = base64.b64decode(encoded)
         
-        # FIX: Use IST for Filename and Entry Time
         now = datetime.now(IST)
         filename = f"{now.strftime('%d-%m-%Y')}_{data['mobile']}_{now.strftime('%H%M%S')}.jpg"
         photo_url = ""
 
         try:
-            # DRIVE_FOLDER_ID check
             if not DRIVE_FOLDER_ID: raise Exception("GOOGLE_DRIVE_FOLDER_ID not set in Env")
             drive_link = upload_photo_to_drive(image_bytes, filename, DRIVE_FOLDER_ID)
             if drive_link: photo_url = drive_link
@@ -324,62 +366,140 @@ def entry():
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)})
 
-# ... [Keep get_today_bookings and other routes mostly the same, ensure get_today_bookings returns vehicle if needed] ...
-# ... [Keep exit_visitor and main block as before] ...
+# UPDATED EXIT LOGIC to support Custom Time
 @app.route('/api/exit', methods=['POST'])
 def exit_visitor():
     data = request.json
     mobile = str(data.get('mobile')).strip()
+    custom_time = data.get('out_time') # Optional custom time
     
     try:
-        # 1. Get ALL data (Much more robust than 'findall')
-        # This fetches the whole sheet so we can search Python-side
+        # 1. Get ALL data
         all_rows = ws_visitors.get_all_values()
-        
         target_row_index = -1
         target_out_time = None
         
-        # 2. Iterate BACKWARDS (From the last row up to the top)
-        # We ignore the header (row 0), hence stopping at 0
+        # 2. Iterate BACKWARDS
         total_rows = len(all_rows)
-        
         for i in range(total_rows - 1, 0, -1): 
             row = all_rows[i]
-            
-            # Column 3 is Mobile (Index 2 in Python list)
-            # We strictly compare the mobile number column
-            row_mobile = str(row[2]).strip()
+            row_mobile = str(row[2]).strip() # Col 3 is Mobile
             
             if row_mobile == mobile:
-                # We found the LATEST entry for this visitor
-                target_row_index = i + 1 # Convert 0-based index to Sheet Row Number
-                
-                # Check Out Time (Column 11 -> Index 10)
-                if len(row) > 10:
-                    target_out_time = row[10]
-                else:
-                    target_out_time = "" # If row is short, it's empty
-                
-                # We stop immediately because we only care about the most recent visit
+                target_row_index = i + 1 
+                if len(row) > 10: target_out_time = row[10]
+                else: target_out_time = "" 
                 break 
         
-        # 3. Handle Results
         if target_row_index == -1:
              return jsonify({'status': 'error', 'message': 'Visitor not found in database'})
              
-        # Check if they are already out
         if not target_out_time or str(target_out_time).strip() == "":
-            # It is empty! This is the active user. Mark them out.
-            out_time = datetime.now(IST).strftime("%I:%M %p")
+            # Determine Out Time (Custom or Now)
+            if custom_time:
+                # Expecting format "HH:MM" from input type="time"
+                # Convert 14:30 -> 02:30 PM
+                try:
+                    t_obj = datetime.strptime(custom_time, "%H:%M")
+                    out_time = t_obj.strftime("%I:%M %p")
+                except:
+                    out_time = datetime.now(IST).strftime("%I:%M %p")
+            else:
+                out_time = datetime.now(IST).strftime("%I:%M %p")
+
             ws_visitors.update_cell(target_row_index, 11, out_time)
             return jsonify({'status': 'success', 'out_time': out_time})
         else:
-            # The latest entry already has an out time
             return jsonify({'status': 'error', 'message': f'Already OUT (Time: {target_out_time})'})
 
     except Exception as e:
         print(f"Exit Error: {e}")
         return jsonify({'status': 'error', 'message': str(e)})
+
+# ... [Admin routes remain the same] ...
+@app.route('/api/admin/filter_data', methods=['POST'])
+def filter_data():
+    if session.get('role') != 'Admin': 
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
+    
+    data = request.json
+    start_str = data.get('from')
+    end_str = data.get('to')
+
+    if not ws_visitors: connect_to_db()
+    
+    try:
+        start_date = datetime.strptime(start_str, "%Y-%m-%d").date()
+        end_date = datetime.strptime(end_str, "%Y-%m-%d").date()
+        
+        # Get all values including the row index logic
+        all_rows = ws_visitors.get_all_values()
+        headers = all_rows[0]
+        filtered_rows = []
+
+        # Start from 1 to skip header
+        for idx, row in enumerate(all_rows[1:]): 
+            try:
+                # idx starts at 0, so actual sheet row is idx + 2 (Header is 1)
+                sheet_row_number = idx + 2 
+                
+                # Check Date (Column A / Index 0)
+                row_date = datetime.strptime(row[0], "%d-%m-%Y").date()
+                
+                if start_date <= row_date <= end_date:
+                    # Append the Sheet Row Number (Pass ID) to the end of the row data
+                    # This ensures the frontend has the ID to display
+                    row.append(sheet_row_number)
+                    filtered_rows.append(row)
+            except (ValueError, IndexError):
+                continue
+
+        return jsonify({
+            'status': 'success',
+            'headers': headers,
+            'data': filtered_rows
+        })
+    except Exception as e:
+        print(f"Filter Error: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+    
+@app.route('/api/admin/download_report', methods=['GET'])
+def download_report():
+    if session.get('role') != 'Admin': return "Unauthorized", 403
+    
+    start_str = request.args.get('from')
+    end_str = request.args.get('to')
+    
+    try:
+        start_date = datetime.strptime(start_str, "%Y-%m-%d").date()
+        end_date = datetime.strptime(end_str, "%Y-%m-%d").date()
+        
+        all_rows = ws_visitors.get_all_values()
+        
+        si = StringIO()
+        cw = csv.writer(si)
+        cw.writerow(all_rows[0]) # Header
+        
+        for row in all_rows[1:]:
+            try:
+                row_date = datetime.strptime(row[0], "%d-%m-%Y").date()
+                if start_date <= row_date <= end_date:
+                    cw.writerow(row)
+            except: continue
+
+        output = si.getvalue()
+        
+        # UPDATED: Filename with today's date
+        today_str = datetime.now(IST).strftime("%d-%m-%Y")
+        filename = f"SRIT_Visitor_Report_{today_str}.csv"
+        
+        return Response(
+            output,
+            mimetype="text/csv",
+            headers={"Content-disposition": f"attachment; filename={filename}"}
+        )
+    except Exception as e:
+        return str(e), 500
     
 if __name__ == '__main__':
     app.run(debug=True, port=5000)

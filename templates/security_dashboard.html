@@ -6,7 +6,7 @@
     <title>SRIT Security Dashboard</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <style>
-        /* --- PRINT STYLES FOR TICKET --- */
+        /* --- PRINT STYLES --- */
         .p-hive-footer {
             margin-top: 15px;
             text-align: center;
@@ -17,6 +17,63 @@
             border-top: 1px solid #ccc;
             padding-top: 5px;
             width: 100%;
+        }
+
+        /* --- LOADER --- */
+        .loader {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #3498db;
+            border-radius: 50%;
+            width: 16px;
+            height: 16px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            margin-left: 10px;
+            vertical-align: middle;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* --- MODAL --- */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+        }
+
+        .modal-content {
+            background-color: white;
+            margin: 15% auto;
+            padding: 20px;
+            border-radius: 12px;
+            width: 300px;
+            text-align: center;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+        }
+
+        .modal-btn {
+            margin-top: 10px;
+            width: 100%;
+        }
+
+        .close-modal {
+            float: right;
+            font-size: 20px;
+            cursor: pointer;
+            color: #aaa;
         }
     </style>
 </head>
@@ -79,8 +136,11 @@
                 <div class="card">
                     <h2 style="margin-top:0; color:var(--primary);">New Entry</h2>
                     <div style="margin-bottom:1rem;">
-                        <input type="number" id="mobile" placeholder="Visitor Mobile (10 digits)"
-                            onblur="checkVisitor()">
+                        <div style="display:flex; align-items:center;">
+                            <input type="number" id="mobile" placeholder="Visitor Mobile (10 digits)"
+                                onblur="checkVisitor()">
+                            <span id="checking-loader" class="loader" style="display:none;"></span>
+                        </div>
                         <div id="status-msg"></div>
                     </div>
                     <input type="text" id="name" placeholder="Full Name">
@@ -102,7 +162,6 @@
                         <input type="text" id="to_meet" placeholder="To Meet (Staff)">
                         <input type="text" id="department" placeholder="Department">
                     </div>
-
                     <button id="printBtn" class="action-btn" onclick="generatePassAndPrint()">🖨️ Print & Save</button>
                     <p id="save-status" style="text-align:center; font-size:0.8rem; margin-top:5px; color:gray;"></p>
                 </div>
@@ -110,12 +169,44 @@
         </div>
 
         <div id="exit" class="tab-content">
-            <div class="card" style="max-width:500px; margin:0 auto; text-align:center;">
-                <h2 style="color:var(--primary);">Visitor Checkout</h2>
-                <input type="number" id="exit-mobile" placeholder="Visitor Mobile Number"
-                    style="text-align:center; font-size:1.2rem;">
-                <br><br>
-                <button class="action-btn red" onclick="markExit()">Mark Exit</button>
+            <div class="card">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <h2 style="color:var(--primary); margin:0;">Active Visitors (Inside)</h2>
+                    <button onclick="loadActiveVisitors()" class="btn-sm action-btn"
+                        style="width:auto; margin:0; padding:8px 15px;">🔄 Refresh</button>
+                </div>
+                <div class="table-container" style="margin-top:1rem;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Mobile</th>
+                                <th>Vehicle</th>
+                                <th>Host</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="active-visitors-body"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="checkoutModal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" onclick="closeModal()">&times;</span>
+            <h3 style="margin-top:0;">Visitor Checkout</h3>
+            <p id="modal-visitor-name" style="color:var(--primary); font-weight:bold;"></p>
+            <input type="hidden" id="modal-visitor-mobile">
+
+            <button class="action-btn modal-btn" onclick="confirmExit('now')">🕒 Check Out NOW</button>
+
+            <div style="margin-top:15px; border-top:1px solid #eee; padding-top:10px;">
+                <p style="font-size:0.8rem; margin-bottom:5px;">Or select previous time:</p>
+                <input type="time" id="custom-exit-time">
+                <button class="action-btn modal-btn" style="background:#64748b;" onclick="confirmExit('custom')">⬅️
+                    Check Out at Time</button>
             </div>
         </div>
     </div>
@@ -159,14 +250,130 @@
     </div>
 
     <script>
-        // --- LOGIC ---
+        // --- TABS & INIT ---
         function showTab(id) {
             document.querySelectorAll('.tab-content').forEach(d => d.classList.remove('active'));
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
             document.getElementById(id).classList.add('active');
+
+            // Highlight Button
+            const btns = document.querySelectorAll('.tab-btn');
+            if (id === 'bookings') btns[0].classList.add('active');
+            if (id === 'entry') btns[1].classList.add('active');
+            if (id === 'exit') {
+                btns[2].classList.add('active');
+                loadActiveVisitors(); // Load table when tab clicked
+            }
+
             if (id === 'bookings') loadBookings();
         }
 
+        // --- LOAD ACTIVE VISITORS FOR EXIT TABLE ---
+        async function loadActiveVisitors() {
+            const tbody = document.getElementById('active-visitors-body');
+            tbody.innerHTML = "<tr><td colspan='5' style='text-align:center'>Loading...</td></tr>";
+
+            try {
+                const res = await fetch('/api/get_active_visitors');
+                const data = await res.json();
+                tbody.innerHTML = "";
+
+                if (data.length === 0) {
+                    tbody.innerHTML = "<tr><td colspan='5' style='text-align:center'>No active visitors inside.</td></tr>";
+                    return;
+                }
+
+                data.forEach(v => {
+                    tbody.innerHTML += `
+                        <tr>
+                            <td><strong>${v.name}</strong></td>
+                            <td>${v.mobile}</td>
+                            <td>${v.vehicle}</td>
+                            <td>${v.to_meet} (${v.dept})</td>
+                            <td>
+                                <button class="btn-sm action-btn red" style="margin:0; width:auto;" 
+                                onclick="openCheckoutModal('${v.mobile}', '${v.name}')">🚪 Check Out</button>
+                            </td>
+                        </tr>`;
+                });
+            } catch (e) { console.error(e); tbody.innerHTML = "<tr><td colspan='5'>Error loading data</td></tr>"; }
+        }
+
+        // --- CHECKOUT MODAL LOGIC ---
+        function openCheckoutModal(mobile, name) {
+            document.getElementById('checkoutModal').style.display = 'block';
+            document.getElementById('modal-visitor-name').innerText = name;
+            document.getElementById('modal-visitor-mobile').value = mobile;
+            document.getElementById('custom-exit-time').value = ""; // Reset time
+        }
+
+        function closeModal() {
+            document.getElementById('checkoutModal').style.display = 'none';
+        }
+
+        async function confirmExit(type) {
+            const mobile = document.getElementById('modal-visitor-mobile').value;
+            let payload = { mobile: mobile };
+
+            if (type === 'custom') {
+                const timeVal = document.getElementById('custom-exit-time').value;
+                if (!timeVal) { alert("Please select a time first."); return; }
+                payload.out_time = timeVal; // Send "HH:MM"
+            }
+
+            try {
+                const res = await fetch('/api/exit', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+
+                if (data.status === 'success') {
+                    alert("✅ Checked Out: " + data.out_time);
+                    closeModal();
+                    loadActiveVisitors(); // Refresh table
+                } else {
+                    alert("❌ Error: " + data.message);
+                }
+            } catch (e) { alert("Network Error"); }
+        }
+
+        // --- EXISTING FUNCTIONS (Modified for Loader) ---
+        async function checkVisitor() {
+            const mobile = document.getElementById('mobile').value;
+            const msg = document.getElementById('status-msg');
+            const loader = document.getElementById('checking-loader');
+
+            msg.innerHTML = "";
+            if (mobile.length !== 10) return;
+
+            loader.style.display = "inline-block"; // Show Loader
+
+            try {
+                const res = await fetch(`/api/check_visitor?mobile=${mobile}`);
+                const data = await res.json();
+                loader.style.display = "none"; // Hide Loader
+
+                if (data.found) {
+                    document.getElementById('name').value = data.name || "";
+                    document.getElementById('company').value = data.company || "";
+                    document.getElementById('laptop').value = data.laptop || "";
+                    document.getElementById('vehicle').value = data.vehicle || "";
+                    document.getElementById('to_meet').value = data.to_meet || "";
+                    document.getElementById('department').value = data.department || "";
+
+                    if (data.is_booking) msg.innerHTML = `<div style="color:green; font-weight:bold;">✅ Pre-Booked by ${data.booked_by}</div>`;
+                    else msg.innerHTML = `<div style="color:blue;">ℹ️ Returning Visitor</div>`;
+                } else {
+                    msg.innerHTML = `<div style="color:gray;">📝 New Visitor</div>`;
+                }
+            } catch (e) {
+                loader.style.display = "none";
+            }
+        }
+
+        // ... [Include loadBookings, processBooking, Camera, Print functions from your previous file] ...
         async function loadBookings() {
             const tbody = document.getElementById('booking-list-body');
             tbody.innerHTML = "<tr><td colspan='5' style='text-align:center'>Loading...</td></tr>";
@@ -212,34 +419,13 @@
             preview.style.display = 'block';
         }
 
-        async function checkVisitor() {
-            const mobile = document.getElementById('mobile').value;
-            const msg = document.getElementById('status-msg');
-            msg.innerHTML = "";
-            if (mobile.length !== 10) return;
-
-            const res = await fetch(`/api/check_visitor?mobile=${mobile}`);
-            const data = await res.json();
-
-            if (data.found) {
-                document.getElementById('name').value = data.name || "";
-                document.getElementById('company').value = data.company || "";
-                document.getElementById('laptop').value = data.laptop || "";
-                document.getElementById('vehicle').value = data.vehicle || ""; // Auto-fill Vehicle
-                document.getElementById('to_meet').value = data.to_meet || "";
-                document.getElementById('department').value = data.department || "";
-                if (data.is_booking) msg.innerHTML = "✅ Pre-Booked";
-                else msg.innerHTML = "ℹ️ Returning Visitor";
-            }
-        }
-
         async function generatePassAndPrint() {
             if (!capturedImage) { alert("Please capture photo!"); return; }
 
             const btn = document.getElementById('printBtn');
             const statusMsg = document.getElementById('save-status');
 
-            // 1. Collect Data (Added vehicle)
+            // 1. Collect Data
             const payload = {
                 mobile: document.getElementById('mobile').value,
                 name: document.getElementById('name').value,
@@ -276,7 +462,7 @@
                 document.getElementById('t-company').innerText = payload.company;
                 document.getElementById('t-mobile').innerText = payload.mobile;
                 document.getElementById('t-laptop').innerText = payload.laptop;
-                document.getElementById('t-vehicle').innerText = payload.vehicle; // Show on Pass
+                document.getElementById('t-vehicle').innerText = payload.vehicle;
                 document.getElementById('t-meet').innerText = payload.to_meet;
                 document.getElementById('t-dept').innerText = payload.department;
                 document.getElementById('t-photo').src = capturedImage;
@@ -316,14 +502,6 @@
                 btn.disabled = false;
                 btn.innerText = "🖨️ Print & Save";
             }
-        }
-
-        async function markExit() {
-            const mobile = document.getElementById('exit-mobile').value;
-            const res = await fetch('/api/exit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mobile }) });
-            const data = await res.json();
-            alert(data.message || "Marked OUT");
-            if (data.status === 'success') document.getElementById('exit-mobile').value = "";
         }
 
         loadBookings();
