@@ -37,7 +37,8 @@
                         <div>
                             <label>Mobile Number</label>
                             <input type="number" id="v_mobile" placeholder="Search by mobile..." onblur="checkVisitor()"
-                                required>
+                                oninput="if(this.value.length > 10) this.value = this.value.slice(0, 10);"
+                                maxlength="10" required>
                         </div>
                         <div>
                             <label>Full Name</label>
@@ -134,16 +135,6 @@
                     document.getElementById('v_name').value = data.name || "";
                     document.getElementById('v_company').value = data.company || "";
                     if (data.vehicle) document.getElementById('v_vehicle').value = data.vehicle;
-
-                    // AUTO-FETCH HOST from Last Visit (Optional feature requested)
-                    if (data.to_meet && data.department) {
-                        // We set it only if user wants it, or we just pre-fill. 
-                        // Since you wanted autofill logic, here it is:
-                        // Uncomment if you want to overwrite session defaults aggressively
-                        // document.getElementById('host_name').value = data.to_meet;
-                        // document.getElementById('host_dept').value = data.department;
-                    }
-
                     msg.innerHTML = "✨ Visitor Found! Details Auto-filled.";
                     msg.style.color = "var(--success)";
                 } else {
@@ -179,8 +170,8 @@
                 company: document.getElementById('v_company').value,
                 vehicle: document.getElementById('v_vehicle').value,
                 purpose: document.getElementById('v_purpose').value,
-                to_meet: document.getElementById('host_name').value, // Use the Editable Field
-                department: document.getElementById('host_dept').value // Use the Editable Field
+                to_meet: document.getElementById('host_name').value,
+                department: document.getElementById('host_dept').value
             };
 
             try {
@@ -195,7 +186,6 @@
                     msg.innerText = "✅ Appointment Scheduled Successfully!";
                     msg.style.color = "var(--success)";
                     document.getElementById('bookingForm').reset();
-                    // Restore defaults from session (hidden way or reload)
                     setTimeout(() => window.location.reload(), 2000);
                 } else {
                     msg.innerText = "❌ Error: " + result.message;
@@ -210,7 +200,6 @@
             }
         }
 
-        // --- LOAD MY BOOKINGS ---
         async function loadMyBookings() {
             try {
                 const res = await fetch('/api/get_user_bookings');

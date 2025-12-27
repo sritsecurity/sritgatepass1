@@ -136,13 +136,19 @@
                 <div class="card">
                     <h2 style="margin-top:0; color:var(--primary);">New Entry</h2>
                     <div style="margin-bottom:1rem;">
-                        <div style="display:flex; align-items:center;">
+                        <div style="display:flex; align-items:center; gap: 10px;">
                             <input type="number" id="mobile" placeholder="Visitor Mobile (10 digits)"
-                                onblur="checkVisitor()">
+                                oninput="if(this.value.length > 10) this.value = this.value.slice(0, 10);"
+                                maxlength="10" style="flex: 1;">
+
+                            <button class="btn-sm action-btn" style="margin:0; width:auto; padding: 10px 15px;"
+                                onclick="checkVisitor()">🔍 Search</button>
+
                             <span id="checking-loader" class="loader" style="display:none;"></span>
                         </div>
                         <div id="status-msg"></div>
                     </div>
+
                     <input type="text" id="name" placeholder="Full Name">
                     <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
                         <select id="designation">
@@ -199,9 +205,7 @@
             <h3 style="margin-top:0;">Visitor Checkout</h3>
             <p id="modal-visitor-name" style="color:var(--primary); font-weight:bold;"></p>
             <input type="hidden" id="modal-visitor-mobile">
-
             <button class="action-btn modal-btn" onclick="confirmExit('now')">🕒 Check Out NOW</button>
-
             <div style="margin-top:15px; border-top:1px solid #eee; padding-top:10px;">
                 <p style="font-size:0.8rem; margin-bottom:5px;">Or select previous time:</p>
                 <input type="time" id="custom-exit-time">
@@ -256,33 +260,28 @@
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
             document.getElementById(id).classList.add('active');
 
-            // Highlight Button
             const btns = document.querySelectorAll('.tab-btn');
             if (id === 'bookings') btns[0].classList.add('active');
             if (id === 'entry') btns[1].classList.add('active');
             if (id === 'exit') {
                 btns[2].classList.add('active');
-                loadActiveVisitors(); // Load table when tab clicked
+                loadActiveVisitors();
             }
-
             if (id === 'bookings') loadBookings();
         }
 
-        // --- LOAD ACTIVE VISITORS FOR EXIT TABLE ---
+        // --- LOAD ACTIVE VISITORS ---
         async function loadActiveVisitors() {
             const tbody = document.getElementById('active-visitors-body');
             tbody.innerHTML = "<tr><td colspan='5' style='text-align:center'>Loading...</td></tr>";
-
             try {
                 const res = await fetch('/api/get_active_visitors');
                 const data = await res.json();
                 tbody.innerHTML = "";
-
                 if (data.length === 0) {
                     tbody.innerHTML = "<tr><td colspan='5' style='text-align:center'>No active visitors inside.</td></tr>";
                     return;
                 }
-
                 data.forEach(v => {
                     tbody.innerHTML += `
                         <tr>
@@ -304,7 +303,7 @@
             document.getElementById('checkoutModal').style.display = 'block';
             document.getElementById('modal-visitor-name').innerText = name;
             document.getElementById('modal-visitor-mobile').value = mobile;
-            document.getElementById('custom-exit-time').value = ""; // Reset time
+            document.getElementById('custom-exit-time').value = "";
         }
 
         function closeModal() {
@@ -318,7 +317,7 @@
             if (type === 'custom') {
                 const timeVal = document.getElementById('custom-exit-time').value;
                 if (!timeVal) { alert("Please select a time first."); return; }
-                payload.out_time = timeVal; // Send "HH:MM"
+                payload.out_time = timeVal;
             }
 
             try {
@@ -332,28 +331,33 @@
                 if (data.status === 'success') {
                     alert("✅ Checked Out: " + data.out_time);
                     closeModal();
-                    loadActiveVisitors(); // Refresh table
+                    loadActiveVisitors();
                 } else {
                     alert("❌ Error: " + data.message);
                 }
             } catch (e) { alert("Network Error"); }
         }
 
-        // --- EXISTING FUNCTIONS (Modified for Loader) ---
+        // --- EXISTING FUNCTIONS (Modified) ---
         async function checkVisitor() {
             const mobile = document.getElementById('mobile').value;
             const msg = document.getElementById('status-msg');
             const loader = document.getElementById('checking-loader');
 
             msg.innerHTML = "";
-            if (mobile.length !== 10) return;
 
-            loader.style.display = "inline-block"; // Show Loader
+            // Explicit check for button click action
+            if (mobile.length !== 10) {
+                alert("Please enter a valid 10-digit mobile number.");
+                return;
+            }
+
+            loader.style.display = "inline-block";
 
             try {
                 const res = await fetch(`/api/check_visitor?mobile=${mobile}`);
                 const data = await res.json();
-                loader.style.display = "none"; // Hide Loader
+                loader.style.display = "none";
 
                 if (data.found) {
                     document.getElementById('name').value = data.name || "";
@@ -364,16 +368,17 @@
                     document.getElementById('department').value = data.department || "";
 
                     if (data.is_booking) msg.innerHTML = `<div style="color:green; font-weight:bold;">✅ Pre-Booked by ${data.booked_by}</div>`;
-                    else msg.innerHTML = `<div style="color:blue;">ℹ️ Returning Visitor</div>`;
+                    else msg.innerHTML = `<div style="color:blue;">ℹ️ Returning Visitor - Details Autofilled</div>`;
                 } else {
                     msg.innerHTML = `<div style="color:gray;">📝 New Visitor</div>`;
                 }
             } catch (e) {
                 loader.style.display = "none";
+                alert("Error checking database.");
             }
         }
 
-        // ... [Include loadBookings, processBooking, Camera, Print functions from your previous file] ...
+        // --- Load Bookings with Process Logic ---
         async function loadBookings() {
             const tbody = document.getElementById('booking-list-body');
             tbody.innerHTML = "<tr><td colspan='5' style='text-align:center'>Loading...</td></tr>";
@@ -386,22 +391,33 @@
                     return;
                 }
                 data.forEach(b => {
+                    const bookingJson = JSON.stringify(b).replace(/"/g, '&quot;');
+
                     tbody.innerHTML += `
                         <tr>
                             <td><strong>${b.visitor}</strong></td>
                             <td>${b.mobile}</td>
                             <td>${b.booked_by}</td>
                             <td><span style="background:#e2e8f0; padding:2px 6px; border-radius:4px; font-size:0.8rem;">${b.dept}</span></td>
-                            <td><button class="btn-sm action-btn" style="margin:0; width:auto; padding:5px 10px;" onclick="processBooking('${b.mobile}')">Process</button></td>
+                            <td>
+                                <button class="btn-sm action-btn" style="margin:0; width:auto; padding:5px 10px;" 
+                                onclick='processBooking(${bookingJson})'>Process</button>
+                            </td>
                         </tr>`;
                 });
-            } catch (e) { tbody.innerHTML = "<tr><td colspan='5'>Error loading bookings</td></tr>"; }
+            } catch (e) { console.error(e); tbody.innerHTML = "<tr><td colspan='5'>Error loading bookings</td></tr>"; }
         }
 
-        function processBooking(mobile) {
+        function processBooking(bookingData) {
             showTab('entry');
-            document.getElementById('mobile').value = mobile;
-            checkVisitor();
+            document.getElementById('mobile').value = bookingData.mobile;
+            document.getElementById('name').value = bookingData.visitor || "";
+            document.getElementById('company').value = bookingData.company || "";
+            document.getElementById('to_meet').value = bookingData.booked_by || "";
+            document.getElementById('department').value = bookingData.dept || "";
+            document.getElementById('vehicle').value = bookingData.vehicle_number || "";
+            const msg = document.getElementById('status-msg');
+            msg.innerHTML = `<div style="color:green; font-weight:bold;">✅ Pre-Booked Data Loaded</div>`;
         }
 
         const video = document.getElementById('video');
@@ -425,7 +441,6 @@
             const btn = document.getElementById('printBtn');
             const statusMsg = document.getElementById('save-status');
 
-            // 1. Collect Data
             const payload = {
                 mobile: document.getElementById('mobile').value,
                 name: document.getElementById('name').value,
@@ -439,18 +454,17 @@
             };
 
             if (!payload.mobile || !payload.name) { alert("Please enter Name and Mobile"); return; }
+            if (payload.mobile.length !== 10) { alert("Mobile number must be exactly 10 digits"); return; }
 
             btn.disabled = true;
             btn.innerText = "⏳ Preparing...";
             statusMsg.innerText = "Getting Pass ID...";
 
             try {
-                // 2. FAST: Get Sequential ID Only
                 const idRes = await fetch('/api/get_next_id');
                 const idData = await idRes.json();
                 const passID = idData.next_id || "---";
 
-                // 3. Update Ticket UI
                 const now = new Date();
                 const dateStr = now.toLocaleDateString('en-GB');
                 const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
@@ -467,7 +481,6 @@
                 document.getElementById('t-dept').innerText = payload.department;
                 document.getElementById('t-photo').src = capturedImage;
 
-                // 4. START UPLOAD
                 statusMsg.innerText = "🔄 Syncing to Cloud...";
                 statusMsg.style.color = "blue";
 
@@ -477,7 +490,6 @@
                     body: JSON.stringify(payload)
                 });
 
-                // 5. PRINT
                 setTimeout(() => {
                     window.print();
 
